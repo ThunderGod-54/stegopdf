@@ -120,13 +120,20 @@
   <p>Click on any PDF page → Add Text / Image / Audio note</p>
   <div id="dropZone">📥 Drop Image Here or Click to Pick</div>
   <div id="viewer"></div>
-
+  <div class="toolbar">
+    <input type="file" id="pdfUpload" accept="application/pdf" style="display:none">
+    <button class="btn btn-primary" onclick="document.getElementById('pdfUpload').click()">📂 Open PDF</button>
+  
+    <button class="btn" id="savePdfBtn" style="background: #2e7d32; color: white;">💾 Save & Download PDF</button>
+  
+    <span id="statusMsg" style="margin-left: 10px; font-size: 12px; color: #666;"></span>
+  </div>
   <!-- PDF.js -->
   <script src="pdf.js"></script>
   <script> pdfjsLib.GlobalWorkerOptions.workerSrc = "pdf.worker.js"; </script>
 
   <!-- PDF-Lib + Opus Recorder -->
-  <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/opus-media-recorder@latest/OpusMediaRecorder.min.js"></script>
 
   <!-- App JS -->
