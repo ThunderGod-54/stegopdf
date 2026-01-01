@@ -3,141 +3,184 @@
 
 <head>
   <meta charset="UTF-8" />
-  <title>Stego PDF Notes Viewer (Text + Image + Audio)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stego PDF Notes Viewer (Binary Optimized)</title>
 
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background: #f4f4f4;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f0f2f5;
       margin: 0;
       padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
-    h2 {
-      margin-bottom: 10px;
+    .header-container {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 900px;
+      margin-bottom: 20px;
+      text-align: center;
     }
 
     #viewer {
-      max-height: 90vh;
+      width: 100%;
+      max-width: 1000px;
+      height: 80vh;
       overflow-y: auto;
-      border: 2px solid #ddd;
-      padding: 10px;
-      background: white;
-      scroll-behavior: smooth;
+      border: 1px solid #ccc;
+      background: #525659;
+      padding: 20px;
+      border-radius: 8px;
     }
 
+    /* PDF Page container */
     .pageWrapper {
       position: relative;
-      margin-bottom: 25px;
+      margin: 0 auto 30px auto;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+      background: white;
+      cursor: crosshair;
     }
 
+    /* Markers */
     .note-marker {
-      width: 18px;
-      height: 18px;
-      background: #00aaff;
+      width: 22px;
+      height: 22px;
+      background: #ff3e3e;
       border-radius: 50%;
-      border: 2px solid #fff;
+      border: 2px solid white;
       position: absolute;
-      cursor: grab;
+      cursor: pointer;
       z-index: 100;
-      box-shadow: 0 0 5px #0085cc;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+      transition: transform 0.2s;
     }
 
+    .note-marker:hover {
+      transform: scale(1.2);
+      background: #ff1a1a;
+    }
+
+    /* Popups & Menus */
     .menuBox {
       position: absolute;
-      padding: 8px;
-      background: #fff;
-      border: 2px solid #0099ff;
-      border-radius: 6px;
+      background: white;
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+      border: 1px solid #0099ff;
       z-index: 2000;
+      display: flex;
+      gap: 8px;
+      align-items: center;
     }
 
     .menuBox button {
-      margin: 3px;
-      padding: 3px 8px;
+      padding: 6px 12px;
       cursor: pointer;
+      background: #0099ff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 13px;
     }
 
     .note-popup {
       position: absolute;
-      background: #ffffe6;
-      border: 1px solid #e3d700;
-      padding: 5px 8px;
+      background: #fff9c4;
+      border: 1px solid #fbc02d;
+      padding: 12px;
       border-radius: 6px;
       z-index: 999;
       max-width: 250px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      font-size: 14px;
+      color: #333;
     }
 
-    .revealImage {
-      position: absolute;
-      max-width: 240px;
-      border: 2px solid #0099ff;
+    /* UI Elements */
+    .toolbar {
+      margin-top: 15px;
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      font-weight: bold;
       border-radius: 6px;
-      z-index: 999;
+      border: none;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .btn-primary {
+      background: #007bff;
+      color: white;
+    }
+
+    .btn-success {
+      background: #28a745;
+      color: white;
+    }
+
+    .btn:hover {
+      opacity: 0.85;
+    }
+
+    #statusMsg {
+      font-weight: bold;
+      color: #007bff;
     }
 
     #dropZone {
-      width: 260px;
-      height: 120px;
-      border: 3px dashed #00aaff;
-      border-radius: 12px;
+      width: 100%;
+      max-width: 400px;
+      height: 80px;
+      border: 2px dashed #007bff;
+      border-radius: 8px;
       display: none;
       justify-content: center;
       align-items: center;
-      background: #e8f7ff;
-      cursor: pointer;
-      margin: 15px auto;
-      font-size: 16px;
-      text-align: center;
+      background: #e7f3ff;
+      margin: 10px auto;
     }
 
     #dropZone.show {
       display: flex;
     }
-
-    #savePdfBtn {
-      margin: 10px 0;
-      padding: 6px 12px;
-      cursor: pointer;
-      background: #00aaff;
-      color: white;
-      border: none;
-      border-radius: 5px;
-    }
-
-    #savePdfBtn:hover {
-      background: #0085cc;
-    }
   </style>
 </head>
-
 <body>
-
-  <h2>Stego PDF Editor — Text | Image | Audio</h2>
-  <input type="file" id="pdfUpload" accept="application/pdf">
-  <button id="savePdfBtn">💾 Save PDF</button>
-
-  <p>Click on any PDF page → Add Text / Image / Audio note</p>
-  <div id="dropZone">📥 Drop Image Here or Click to Pick</div>
-  <div id="viewer"></div>
-  <div class="toolbar">
-    <input type="file" id="pdfUpload" accept="application/pdf" style="display:none">
-    <button class="btn btn-primary" onclick="document.getElementById('pdfUpload').click()">📂 Open PDF</button>
-  
-    <button class="btn" id="savePdfBtn" style="background: #2e7d32; color: white;">💾 Save & Download PDF</button>
-  
-    <span id="statusMsg" style="margin-left: 10px; font-size: 12px; color: #666;"></span>
+  <div class="header-container">
+    <h2>🔐 Stego PDF Editor</h2>
+    <p>Upload a PDF, click anywhere to hide <b>Text, High-Res Images, or Audio</b>.</p>
+    <div class="toolbar">
+      <input type="file" id="pdfUpload" accept="application/pdf" style="display:none">
+      <input type="file" id="stegoViewUpload" accept="application/pdf" style="display:none">
+    
+      <button class="btn btn-primary" onclick="document.getElementById('pdfUpload').click()">📂 Open PDF (New)</button>
+      <button class="btn btn-success" id="savePdfBtn">💾 Save & Download</button>
+    
+      <button class="btn" style="background:#6f42c1; color:white;"
+        onclick="document.getElementById('stegoViewUpload').click()">🔍 View Stego File</button>
+    </div>
+    <div id="statusMsg"></div>
+    <div id="dropZone">📥 Drop Image Here or Click to Pick</div>
   </div>
-  <!-- PDF.js -->
-  <script src="pdf.js"></script>
-  <script> pdfjsLib.GlobalWorkerOptions.workerSrc = "pdf.worker.js"; </script>
-
-  <!-- PDF-Lib + Opus Recorder -->
+  <div id="viewer">
+  </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/opus-media-recorder@latest/OpusMediaRecorder.min.js"></script>
-
-  <!-- App JS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
   <script src="app.js"></script>
 </body>
-
 </html>
