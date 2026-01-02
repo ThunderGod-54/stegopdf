@@ -220,27 +220,23 @@ function openPopupMenu(e, wrap, pageNum) {
 async function recordAudio(p, x, y, wrap) {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const rec = new MediaRecorder(stream);
-    let chunks = [];
 
+    // --- COMPRESSION UPDATE START ---
+    // We force a low bitrate (32kbps) and the Opus codec for maximum efficiency
+    const options = {
+      audioBitsPerSecond: 32000,
+      mimeType: 'audio/webm;codecs=opus'
+    };
+
+    const rec = new MediaRecorder(stream, options);
+    // --- COMPRESSION UPDATE END ---
+
+    let chunks = [];
     rec.ondataavailable = e => chunks.push(e.data);
     rec.start();
 
     const indicator = document.createElement("div");
-    indicator.style = `
-      position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #dc3545;
-      color: white;
-      padding: 12px 24px;
-      border-radius: 25px;
-      z-index: 9999;
-      cursor: pointer;
-      font-weight: bold;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    `;
+    indicator.style = `position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #dc3545; color: white; padding: 12px 24px; border-radius: 25px; z-index: 9999; cursor: pointer; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3);`;
     indicator.innerHTML = "🔴 Recording... Click to Stop & Save";
     document.body.appendChild(indicator);
 
@@ -253,7 +249,7 @@ async function recordAudio(p, x, y, wrap) {
         const blob = new Blob(chunks, { type: 'audio/webm' });
         const bytes = new Uint8Array(await blob.arrayBuffer());
         addMarker(p, x, y, "audio", bytes, wrap, true);
-        statusMsg.textContent = "✅ Audio marker added!";
+        statusMsg.textContent = "✅ Compressed audio added!";
         statusMsg.style.color = "#28a745";
       };
     };
@@ -262,7 +258,6 @@ async function recordAudio(p, x, y, wrap) {
     alert("Microphone access denied or not available.");
   }
 }
-
 /**************** MARKER UI *********************/
 function addMarker(pageNum, x, y, type, content, wrap, isNew) {
   // Create marker element
