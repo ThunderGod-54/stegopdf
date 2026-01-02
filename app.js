@@ -1,6 +1,5 @@
 /********************************************************************/
 /* STEGO PDF VIEWER — DEEP STEALTH + TEXT COMPRESSION VERSION       */
-/* FIXED: Marker restoration issue                                 */
 /********************************************************************/
 
 const pdfjsLib = window['pdfjs-dist/build/pdf'];
@@ -13,6 +12,39 @@ const stegoViewUpload = document.getElementById("stegoViewUpload");
 let pdfDoc = null;
 let pdfBase64 = null;
 let pageMarkers = {};
+let currentRecorder = null;
+let recordingStream = null;
+let recordingTimer = null;
+let recordingSeconds = 0;
+let tempRecordingData = null;
+
+// Theme Toggle
+const themeToggle = document.getElementById('themeToggle');
+const sunIcon = document.getElementById('sunIcon');
+const moonIcon = document.getElementById('moonIcon');
+
+themeToggle.addEventListener('click', () => {
+  document.body.classList.toggle('dark-theme');
+  document.body.classList.toggle('light-theme');
+
+  if (document.body.classList.contains('dark-theme')) {
+    sunIcon.style.display = 'none';
+    moonIcon.style.display = 'block';
+  } else {
+    sunIcon.style.display = 'block';
+    moonIcon.style.display = 'none';
+  }
+});
+
+// Show skeleton loader
+function showSkeletonLoader() {
+  viewer.innerHTML = `
+        <div class="skeleton-loader">
+          <div class="skeleton-page"></div>
+          <div class="skeleton-text">Loading your PDF...</div>
+        </div>
+      `;
+}
 
 /**************** HELPER: COMPRESS/DECOMPRESS *********************/
 async function compressText(text) {
@@ -56,6 +88,8 @@ if (stegoViewUpload) {
 
 async function handlePdfLoad(file, successMsg, isViewMode = false) {
   if (!file) return;
+
+  showSkeletonLoader();
   statusMsg.textContent = "Loading PDF...";
   statusMsg.style.color = "#007bff";
 
@@ -88,11 +122,13 @@ async function handlePdfLoad(file, successMsg, isViewMode = false) {
       console.error("Error loading PDF:", error);
       statusMsg.textContent = "❌ Error loading PDF: " + error.message;
       statusMsg.style.color = "#dc3545";
+      viewer.innerHTML = "";
     }
   };
   reader.onerror = () => {
     statusMsg.textContent = "❌ Error reading file";
     statusMsg.style.color = "#dc3545";
+    viewer.innerHTML = "";
   };
   reader.readAsDataURL(file);
 }
@@ -116,10 +152,7 @@ async function renderAllPages() {
 
       await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
 
-      // Add click event to add markers
       canvas.onclick = (e) => openPopupMenu(e, wrap, p);
-
-      // Initialize markers array for this page
       pageMarkers[p] = [];
 
     } catch (error) {
@@ -127,6 +160,122 @@ async function renderAllPages() {
     }
   }
 }
+
+/**************** TEXT MODAL *********************/
+let currentTextContext = null;
+
+function openTextModal(pageNum, x, y, wrap) {
+  currentTextContext = { pageNum, x, y, wrap };
+  document.getElementById('textModal').classList.add('active');
+  document.getElementById('textInput').value = '';
+  document.getElementById('textInput').focus();
+}
+
+function closeTextModal() {
+  document.getElementById('textModal').classList.remove('active');
+  currentTextContext = null;
+}
+
+function saveTextMessage() {
+  const text = document.getElementById('textInput').value.trim();
+  if (text && currentTextContext) {
+    const { pageNum, x, y, wrap } = currentTextContext;
+    addMarker(pageNum, x, y, "text", text, wrap, true);
+    statusMsg.textContent = "✅ Text marker added!";
+    statusMsg.style.color = "#28a745";
+    closeTextModal();
+  }
+}
+
+/**************** AUDIO MODAL *********************/
+let currentAudioContext = null;
+
+function openAudioModal(pageNum, x, y, wrap) {
+  currentAudioContext = { pageNum, x, y, wrap };
+  document.getElementById('audioModal').classList.add('active');
+  document.getElementById('recordStatus').textContent = 'Click to start recording';
+  document.getElementById('recordTime').textContent = '00:00';
+  document.getElementById('recordButton').classList.remove('recording');
+  recordingSeconds = 0;
+}
+
+function cancelAudioRecording() {
+  if (currentRecorder && currentRecorder.state === 'recording') {
+    currentRecorder.stop();
+    if (recordingStream) {
+      recordingStream.getTracks().forEach(t => t.stop());
+    }
+  }
+  if (recordingTimer) {
+    clearInterval(recordingTimer);
+  }
+  document.getElementById('audioModal').classList.remove('active');
+  currentAudioContext = null;
+  currentRecorder = null;
+  recordingStream = null;
+}
+
+document.getElementById('recordButton').addEventListener('click', async function () {
+  if (!currentRecorder || currentRecorder.state === 'inactive') {
+    // Start recording
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingStream = stream;
+
+      const options = {
+        audioBitsPerSecond: 32000,
+        mimeType: 'audio/webm;codecs=opus'
+      };
+
+      currentRecorder = new MediaRecorder(stream, options);
+      let chunks = [];
+
+      currentRecorder.ondataavailable = e => chunks.push(e.data);
+
+      currentRecorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+
+        if (currentAudioContext) {
+          const { pageNum, x, y, wrap } = currentAudioContext;
+          addMarker(pageNum, x, y, "audio", bytes, wrap, true);
+          statusMsg.textContent = "✅ Compressed audio added!";
+          statusMsg.style.color = "#28a745";
+        }
+
+        document.getElementById('audioModal').classList.remove('active');
+        stream.getTracks().forEach(t => t.stop());
+        clearInterval(recordingTimer);
+        currentRecorder = null;
+        recordingStream = null;
+        currentAudioContext = null;
+      };
+
+      currentRecorder.start();
+      this.classList.add('recording');
+      document.getElementById('recordStatus').textContent = 'Recording... Click to stop';
+
+      recordingSeconds = 0;
+      recordingTimer = setInterval(() => {
+        recordingSeconds++;
+        const mins = Math.floor(recordingSeconds / 60).toString().padStart(2, '0');
+        const secs = (recordingSeconds % 60).toString().padStart(2, '0');
+        document.getElementById('recordTime').textContent = `${mins}:${secs}`;
+      }, 1000);
+
+    } catch (error) {
+      console.error("Audio recording failed:", error);
+      statusMsg.textContent = "❌ Microphone access denied";
+      statusMsg.style.color = "#dc3545";
+      document.getElementById('audioModal').classList.remove('active');
+    }
+  } else {
+    // Stop recording
+    currentRecorder.stop();
+    this.classList.remove('recording');
+    document.getElementById('recordStatus').textContent = 'Saving...';
+  }
+});
 
 /**************** POPUP MENU & RECORDING *********************/
 function openPopupMenu(e, wrap, pageNum) {
@@ -141,27 +290,20 @@ function openPopupMenu(e, wrap, pageNum) {
   popup.className = "menuBox";
   popup.style = `left:${x}px; top:${y}px;`;
   popup.innerHTML = `
-    <div style="font-weight:bold; margin-bottom:5px;">Add Hidden Data:</div>
-    <button id="btnText" style="background:#28a745;">📝 Text</button>
-    <button id="btnImg" style="background:#6f42c1;">🖼️ Image</button>
-    <button id="btnAudio" style="background:#fd7e14;">🎤 Audio</button>
-    <button onclick="this.parentElement.remove()" style="background:#dc3545;">✕ Cancel</button>
-  `;
+        <div style="font-weight:bold; margin-bottom:5px;">Add Hidden Data:</div>
+        <button id="btnText" style="background:#28a745;">📝 Text</button>
+        <button id="btnImg" style="background:#6f42c1;">🖼️ Image</button>
+        <button id="btnAudio" style="background:#fd7e14;">🎤 Audio</button>
+        <button onclick="closePopup()" style="background:#dc3545;">✕ Cancel</button>
+      `;
 
   wrap.appendChild(popup);
 
-  // Text button
   document.getElementById("btnText").onclick = () => {
-    const t = prompt("Enter secret message (will be compressed):");
-    if (t && t.trim()) {
-      addMarker(pageNum, x, y, "text", t.trim(), wrap, true);
-      statusMsg.textContent = "✅ Text marker added!";
-      statusMsg.style.color = "#28a745";
-    }
+    openTextModal(pageNum, x, y, wrap);
     closePopup();
   };
 
-  // Image button
   document.getElementById("btnImg").onclick = () => {
     const input = document.createElement("input");
     input.type = "file";
@@ -178,58 +320,15 @@ function openPopupMenu(e, wrap, pageNum) {
     closePopup();
   };
 
-  // Audio button
   document.getElementById("btnAudio").onclick = () => {
-    recordAudio(pageNum, x, y, wrap);
+    openAudioModal(pageNum, x, y, wrap);
     closePopup();
   };
 }
 
-async function recordAudio(p, x, y, wrap) {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-    // --- COMPRESSION UPDATE START ---
-    // We force a low bitrate (32kbps) and the Opus codec for maximum efficiency
-    const options = {
-      audioBitsPerSecond: 32000,
-      mimeType: 'audio/webm;codecs=opus'
-    };
-
-    const rec = new MediaRecorder(stream, options);
-    // --- COMPRESSION UPDATE END ---
-
-    let chunks = [];
-    rec.ondataavailable = e => chunks.push(e.data);
-    rec.start();
-
-    const indicator = document.createElement("div");
-    indicator.style = `position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #dc3545; color: white; padding: 12px 24px; border-radius: 25px; z-index: 9999; cursor: pointer; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3);`;
-    indicator.innerHTML = "🔴 Recording... Click to Stop & Save";
-    document.body.appendChild(indicator);
-
-    indicator.onclick = () => {
-      rec.stop();
-      indicator.remove();
-      stream.getTracks().forEach(t => t.stop());
-
-      rec.onstop = async () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        const bytes = new Uint8Array(await blob.arrayBuffer());
-        addMarker(p, x, y, "audio", bytes, wrap, true);
-        statusMsg.textContent = "✅ Compressed audio added!";
-        statusMsg.style.color = "#28a745";
-      };
-    };
-  } catch (error) {
-    console.error("Audio recording failed:", error);
-    alert("Microphone access denied or not available.");
-  }
-}
 function addMarker(pageNum, x, y, type, content, wrap, isNew) {
   const m = document.createElement("div");
   m.className = "note-marker";
-  // Initial positioning
   m.style.left = `${x - 12}px`;
   m.style.top = `${y - 12}px`;
   m.dataset.type = type;
@@ -238,7 +337,6 @@ function addMarker(pageNum, x, y, type, content, wrap, isNew) {
   let isDragging = false;
   let startX, startY;
 
-  // Handle Clicking to Reveal
   m.onclick = (e) => {
     e.stopPropagation();
     if (!isDragging) {
@@ -246,9 +344,8 @@ function addMarker(pageNum, x, y, type, content, wrap, isNew) {
     }
   };
 
-  // Handle Dragging to Move
   m.onmousedown = function (event) {
-    if (event.button !== 0) return; // Only left click drags
+    if (event.button !== 0) return;
 
     isDragging = false;
     startX = event.clientX;
@@ -262,7 +359,6 @@ function addMarker(pageNum, x, y, type, content, wrap, isNew) {
       let newX = pageX - rect.left - shiftX;
       let newY = pageY - rect.top - shiftY;
 
-      // Boundary checks to keep marker inside the page
       newX = Math.max(0, Math.min(newX, rect.width - 24));
       newY = Math.max(0, Math.min(newY, rect.height - 24));
 
@@ -271,29 +367,24 @@ function addMarker(pageNum, x, y, type, content, wrap, isNew) {
     }
 
     function onMouseMove(event) {
-      // If mouse moves more than 5 pixels, it's a drag, not a click
       if (Math.abs(event.clientX - startX) > 5 || Math.abs(event.clientY - startY) > 5) {
         isDragging = true;
         moveAt(event.clientX, event.clientY);
       }
     }
 
-    // Attach to document so it doesn't "lose" the marker if you move fast
     document.addEventListener('mousemove', onMouseMove);
 
-    // DROP LOGIC
     document.onmouseup = function () {
       document.removeEventListener('mousemove', onMouseMove);
-      document.onmouseup = null; // Clean up document listener
+      document.onmouseup = null;
 
       if (isDragging) {
         const finalX = parseInt(m.style.left) + 12;
         const finalY = parseInt(m.style.top) + 12;
 
-        // Save new position to global object
         updateMarkerPosition(pageNum, x, y, finalX, finalY);
 
-        // Update local scope variables for future moves
         x = finalX;
         y = finalY;
 
@@ -301,7 +392,6 @@ function addMarker(pageNum, x, y, type, content, wrap, isNew) {
         statusMsg.style.color = "#28a745";
       }
 
-      // Prevent click from firing immediately after a long drag
       setTimeout(() => { isDragging = false; }, 100);
     };
   };
@@ -315,6 +405,19 @@ function addMarker(pageNum, x, y, type, content, wrap, isNew) {
   }
 }
 
+function updateMarkerPosition(pageNum, oldX, oldY, newX, newY) {
+  if (!pageMarkers[pageNum]) return;
+
+  const marker = pageMarkers[pageNum].find(m =>
+    Math.abs(m.x - oldX) < 5 && Math.abs(m.y - oldY) < 5
+  );
+
+  if (marker) {
+    marker.x = Math.round(newX);
+    marker.y = Math.round(newY);
+  }
+}
+
 function revealMarker(m, wrap) {
   const existing = wrap.querySelector('.note-popup');
   if (existing) existing.remove();
@@ -322,34 +425,32 @@ function revealMarker(m, wrap) {
   const type = m.dataset.type;
   const content = m.cachedContent;
 
-  // Calculate popup position relative to the marker's current position
   const mLeft = parseInt(m.style.left);
   const mTop = parseInt(m.style.top);
 
   const display = document.createElement("div");
   display.className = "note-popup";
-  // Position popup to the right of the dot
   display.style = `left:${mLeft + 30}px; top:${mTop}px;`;
 
   if (type === "text") {
     display.innerHTML = `
-      <div style="margin-bottom:5px; font-weight:bold;">📝 Hidden Text:</div>
-      <div style="max-height:200px; overflow-y:auto; word-break: break-all; white-space: pre-wrap;">${content}</div>
-    `;
+          <div style="margin-bottom:5px; font-weight:bold;">📝 Hidden Text:</div>
+          <div style="max-height:200px; overflow-y:auto; word-break: break-all; white-space: pre-wrap;">${content}</div>
+        `;
   } else if (type === "image") {
     const blob = new Blob([content], { type: "image/jpeg" });
     const url = URL.createObjectURL(blob);
     display.innerHTML = `
-      <div style="margin-bottom:5px; font-weight:bold;">🖼️ Hidden Image:</div>
-      <img src="${url}" style="max-width:250px; max-height:250px; border-radius:4px;">
-    `;
+          <div style="margin-bottom:5px; font-weight:bold;">🖼️ Hidden Image:</div>
+          <img src="${url}" style="max-width:250px; max-height:250px; border-radius:4px;">
+        `;
   } else if (type === "audio") {
     const blob = new Blob([content], { type: "audio/webm" });
     const url = URL.createObjectURL(blob);
     display.innerHTML = `
-      <div style="margin-bottom:5px; font-weight:bold;">🎤 Hidden Audio:</div>
-      <audio src="${url}" controls style="width:250px; height:40px;"></audio>
-    `;
+          <div style="margin-bottom:5px; font-weight:bold;">🎤 Hidden Audio:</div>
+          <audio src="${url}" controls style="width:250px; height:40px;"></audio>
+        `;
   }
 
   const closeBtn = document.createElement("button");
@@ -363,14 +464,17 @@ function revealMarker(m, wrap) {
 
   wrap.appendChild(display);
 }
+
 function closePopup() {
   const p = document.getElementById("stegoPopup");
   if (p) p.remove();
 }
-/**************** SAVE (METADATA + COMPRESSION) - FIXED *********************/
+
+/**************** SAVE (METADATA + COMPRESSION) *********************/
 saveBtn.onclick = async () => {
   if (!pdfBase64) {
-    alert("Please load a PDF first!");
+    statusMsg.textContent = "❌ Please load a PDF first!";
+    statusMsg.style.color = "#dc3545";
     return;
   }
 
@@ -391,7 +495,6 @@ saveBtn.onclick = async () => {
           const compressed = await compressText(m.content);
           metadataEntries.push(`${pageNum}|${m.x}|${m.y}|ztext|${compressed}`);
         } else {
-          // FIX: Improved Binary to Base64 conversion for large images/audio
           let binary = '';
           const bytes = new Uint8Array(m.content);
           const len = bytes.byteLength;
@@ -406,8 +509,8 @@ saveBtn.onclick = async () => {
     }
 
     if (metadataEntries.length === 0) {
-      alert("No markers to save!");
-      statusMsg.textContent = "No hidden data to save";
+      statusMsg.textContent = "⚠️ No markers to save!";
+      statusMsg.style.color = "#dc3545";
       return;
     }
 
@@ -417,7 +520,6 @@ saveBtn.onclick = async () => {
       markers: metadataEntries
     });
 
-    // We store the data in the "Keywords" field of the PDF
     pdfLibDoc.setKeywords([metadataString]);
 
     const pdfBytes = await pdfLibDoc.save();
@@ -439,226 +541,15 @@ saveBtn.onclick = async () => {
     console.error("Save failed:", err);
     statusMsg.textContent = "❌ Save failed. Image might be too large.";
     statusMsg.style.color = "#dc3545";
-    alert("Save failed: " + err.message);
   }
 };
-/**************** RESTORE (METADATA + DECOMPRESSION) - UPDATED FOR ARRAY *********************/
+
+/**************** RESTORE (METADATA + DECOMPRESSION) *********************/
 async function restoreMarkers() {
   try {
     const { PDFDocument } = PDFLib;
     const pdfLibDoc = await PDFDocument.load(Uint8Array.from(atob(pdfBase64), c => c.charCodeAt(0)));
 
-    // Get keywords - PDF-Lib returns an ARRAY
-    const keywords = pdfLibDoc.getKeywords();
-    console.log("Keywords array:", keywords);
-
-    if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
-      console.log("No keywords array found in PDF");
-      return false;
-    }
-
-    let metadataString = null;
-
-    // Look for our metadata in the keywords array (it's the last element)
-    for (let i = keywords.length - 1; i >= 0; i--) {
-      const keyword = keywords[i];
-      if (typeof keyword === 'string') {
-        // Check if it's our JSON metadata
-        if (keyword.includes('"markers"') || keyword.includes('"version"')) {
-          metadataString = keyword;
-          console.log("Found metadata at index", i);
-          break;
-        }
-      }
-    }
-
-    if (!metadataString) {
-      console.log("No metadata string found in keywords array");
-      return false;
-    }
-
-    console.log("Metadata string:", metadataString.substring(0, 100) + "...");
-
-    // Parse the metadata
-    let markersArray = [];
-
-    try {
-      const parsed = JSON.parse(metadataString);
-      console.log("Metadata parsed successfully:", parsed);
-
-      if (parsed && parsed.markers && Array.isArray(parsed.markers)) {
-        markersArray = parsed.markers;
-        console.log(`Found ${markersArray.length} markers in v${parsed.version || '1.0'} format`);
-      } else if (Array.isArray(parsed)) {
-        markersArray = parsed;
-        console.log(`Found ${markersArray.length} markers in old array format`);
-      }
-    } catch (parseError) {
-      console.error("JSON parse error:", parseError);
-      return false;
-    }
-
-    if (!Array.isArray(markersArray) || markersArray.length === 0) {
-      console.log("No markers array found in metadata");
-      return false;
-    }
-
-    let restoredCount = 0;
-
-    // Process each marker
-    for (let i = 0; i < markersArray.length; i++) {
-      const entry = markersArray[i];
-
-      if (typeof entry !== 'string') {
-        console.warn(`Marker ${i} is not a string:`, entry);
-        continue;
-      }
-
-      const parts = entry.split("|");
-
-      // We expect 5 parts: page|x|y|type|data
-      if (parts.length !== 5) {
-        console.warn(`Invalid marker format (${parts.length} parts):`, entry);
-        continue;
-      }
-
-      const [pageNum, x, y, type, data] = parts;
-      const pageIndex = parseInt(pageNum, 10);
-
-      if (isNaN(pageIndex) || pageIndex < 1) {
-        console.warn(`Invalid page number: ${pageNum}`);
-        continue;
-      }
-
-      // Get the page wrapper
-      const wraps = document.querySelectorAll('.pageWrapper');
-      if (pageIndex > wraps.length) {
-        console.warn(`Page ${pageIndex} not found. Total pages: ${wraps.length}`);
-        continue;
-      }
-
-      const wrap = wraps[pageIndex - 1];
-      const absX = parseFloat(x);
-      const absY = parseFloat(y);
-
-      console.log(`Processing marker ${i + 1}: Page ${pageIndex}, Type: ${type}`);
-
-      if (type === "ztext") {
-        // Text marker (compressed)
-        try {
-          const originalText = await decompressText(data);
-          console.log(`Text restored: "${originalText.substring(0, 50)}${originalText.length > 50 ? '...' : ''}"`);
-
-          addMarker(pageIndex, absX, absY, "text", originalText, wrap, false);
-          restoredCount++;
-
-          // Update pageMarkers for consistency
-          if (!pageMarkers[pageIndex]) pageMarkers[pageIndex] = [];
-          pageMarkers[pageIndex].push({
-            x: absX,
-            y: absY,
-            type: "text",
-            content: originalText
-          });
-
-        } catch (error) {
-          console.error("Failed to decompress text:", error);
-          // Try as plain base64
-          try {
-            const plainText = atob(data);
-            addMarker(pageIndex, absX, absY, "text", plainText, wrap, false);
-            restoredCount++;
-          } catch (e2) {
-            console.error("Failed to decode base64:", e2);
-          }
-        }
-      } else if (type === "image" || type === "audio") {
-        // Binary marker - data is Base64
-        try {
-          // Check if it's valid Base64
-          if (!/^[A-Za-z0-9+/=]+$/.test(data)) {
-            console.warn(`Invalid Base64 data for ${type}`);
-            continue;
-          }
-
-          const binaryData = Uint8Array.from(atob(data), c => c.charCodeAt(0));
-
-          if (binaryData.length === 0) {
-            console.warn(`Empty binary data for ${type}`);
-            continue;
-          }
-
-          addMarker(pageIndex, absX, absY, type, binaryData, wrap, false);
-          restoredCount++;
-
-          // Update pageMarkers
-          if (!pageMarkers[pageIndex]) pageMarkers[pageIndex] = [];
-          pageMarkers[pageIndex].push({
-            x: absX,
-            y: absY,
-            type: type,
-            content: binaryData
-          });
-
-          console.log(`Restored ${type} (${binaryData.length} bytes)`);
-        } catch (error) {
-          console.error(`Failed to restore ${type}:`, error);
-        }
-      } else {
-        console.warn(`Unknown marker type: ${type}`);
-      }
-    }
-
-    console.log(`Successfully restored ${restoredCount} markers`);
-
-    if (restoredCount > 0) {
-      statusMsg.textContent = `✅ Found ${restoredCount} hidden items! Click red dots to view.`;
-      statusMsg.style.color = "#28a745";
-
-      // Add pulse animation for visual feedback
-      if (!document.querySelector('#pulse-animation')) {
-        const style = document.createElement('style');
-        style.id = 'pulse-animation';
-        style.textContent = `
-          @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.3); }
-            100% { transform: scale(1); }
-          }
-        `;
-        document.head.appendChild(style);
-      }
-
-      // Animate markers
-      setTimeout(() => {
-        const markers = document.querySelectorAll('.note-marker');
-        markers.forEach(marker => {
-          marker.style.animation = 'pulse 1s ease-in-out 2';
-        });
-      }, 100);
-
-      return true;
-    } else {
-      statusMsg.textContent = "⚠️ No hidden data could be restored.";
-      statusMsg.style.color = "#dc3545";
-      return false;
-    }
-
-  } catch (e) {
-    console.error("Restore failed:", e);
-    statusMsg.textContent = "❌ Error restoring data";
-    statusMsg.style.color = "#dc3545";
-    return false;
-  }
-}
-
-/**************** RESTORE (METADATA + DECOMPRESSION) - UPDATED *********************/
-async function restoreMarkers() {
-  try {
-    const { PDFDocument } = PDFLib;
-    const pdfLibDoc = await PDFDocument.load(Uint8Array.from(atob(pdfBase64), c => c.charCodeAt(0)));
-
-    // Get keywords - PDF-Lib returns a STRING
     const keywords = pdfLibDoc.getKeywords();
     console.log("Keywords found:", keywords);
 
@@ -669,7 +560,6 @@ async function restoreMarkers() {
 
     let metadataString = null;
 
-    // Extract JSON from keywords string
     const jsonStart = keywords.indexOf('{');
     const jsonEnd = keywords.lastIndexOf('}');
 
@@ -684,9 +574,8 @@ async function restoreMarkers() {
       return false;
     }
 
-    console.log("Metadata extracted:", metadataString.substring(0, 100) + "...");
+    console.log("Metadata extracted");
 
-    // Parse the metadata
     let markersArray = [];
 
     try {
@@ -695,7 +584,7 @@ async function restoreMarkers() {
 
       if (parsed && parsed.markers && Array.isArray(parsed.markers)) {
         markersArray = parsed.markers;
-        console.log(`Found ${markersArray.length} markers in v${parsed.version || '1.0'} format`);
+        console.log(`Found ${markersArray.length} markers`);
       } else if (Array.isArray(parsed)) {
         markersArray = parsed;
         console.log(`Found ${markersArray.length} markers in old format`);
@@ -712,7 +601,6 @@ async function restoreMarkers() {
 
     let restoredCount = 0;
 
-    // Process each marker
     for (let i = 0; i < markersArray.length; i++) {
       const entry = markersArray[i];
 
@@ -723,9 +611,8 @@ async function restoreMarkers() {
 
       const parts = entry.split("|");
 
-      // Handle both formats: old (5 parts) and new (5 parts with base64 data)
       if (parts.length < 5) {
-        console.warn(`Invalid marker format (${parts.length} parts):`, entry);
+        console.warn(`Invalid marker format:`, entry);
         continue;
       }
 
@@ -737,10 +624,9 @@ async function restoreMarkers() {
         continue;
       }
 
-      // Get the page wrapper
       const wraps = document.querySelectorAll('.pageWrapper');
       if (pageIndex > wraps.length) {
-        console.warn(`Page ${pageIndex} not found. Total pages: ${wraps.length}`);
+        console.warn(`Page ${pageIndex} not found`);
         continue;
       }
 
@@ -748,18 +634,14 @@ async function restoreMarkers() {
       const absX = parseFloat(x);
       const absY = parseFloat(y);
 
-      console.log(`Processing marker ${i + 1}: Page ${pageIndex}, Type: ${type}`);
-
       if (type === "ztext") {
-        // Text marker (compressed)
         try {
           const originalText = await decompressText(data);
-          console.log(`Text restored: "${originalText.substring(0, 50)}${originalText.length > 50 ? '...' : ''}"`);
+          console.log(`Text restored`);
 
           addMarker(pageIndex, absX, absY, "text", originalText, wrap, false);
           restoredCount++;
 
-          // Update pageMarkers for consistency
           if (!pageMarkers[pageIndex]) pageMarkers[pageIndex] = [];
           pageMarkers[pageIndex].push({
             x: absX,
@@ -770,49 +652,35 @@ async function restoreMarkers() {
 
         } catch (error) {
           console.error("Failed to decompress text:", error);
-          // Try as plain base64
-          try {
-            const plainText = atob(data);
-            addMarker(pageIndex, absX, absY, "text", plainText, wrap, false);
-            restoredCount++;
-          } catch (e2) {
-            console.error("Failed to decode base64:", e2);
-          }
         }
       } else if (type === "image" || type === "audio") {
-        // Binary marker - data could be either:
-        // 1. Attachment ID (old format)
-        // 2. Base64 data (new format)
-
-        // Check if it looks like Base64 (contains characters not in typical filenames)
-        const isBase64 = data.length > 20 && !data.includes('.') &&
-          /^[A-Za-z0-9+/=]+$/.test(data);
-
-        if (isBase64) {
-          // New format: Base64 data directly in metadata
-          try {
-            const binaryData = Uint8Array.from(atob(data), c => c.charCodeAt(0));
-
-            addMarker(pageIndex, absX, absY, type, binaryData, wrap, false);
-            restoredCount++;
-
-            // Update pageMarkers
-            if (!pageMarkers[pageIndex]) pageMarkers[pageIndex] = [];
-            pageMarkers[pageIndex].push({
-              x: absX,
-              y: absY,
-              type: type,
-              content: binaryData
-            });
-
-            console.log(`Restored ${type} from Base64 (${binaryData.length} bytes)`);
-          } catch (error) {
-            console.error(`Failed to restore ${type} from Base64:`, error);
+        try {
+          if (!/^[A-Za-z0-9+/=]+$/.test(data)) {
+            console.warn(`Invalid Base64 data for ${type}`);
+            continue;
           }
-        } else {
-          // Old format: Attachment ID
-          console.log(`Old format ${type} attachment cannot be restored: ${data}`);
-          // Note: We could try to extract from PDF context, but it's complex
+
+          const binaryData = Uint8Array.from(atob(data), c => c.charCodeAt(0));
+
+          if (binaryData.length === 0) {
+            console.warn(`Empty binary data for ${type}`);
+            continue;
+          }
+
+          addMarker(pageIndex, absX, absY, type, binaryData, wrap, false);
+          restoredCount++;
+
+          if (!pageMarkers[pageIndex]) pageMarkers[pageIndex] = [];
+          pageMarkers[pageIndex].push({
+            x: absX,
+            y: absY,
+            type: type,
+            content: binaryData
+          });
+
+          console.log(`Restored ${type}`);
+        } catch (error) {
+          console.error(`Failed to restore ${type}:`, error);
         }
       }
     }
@@ -823,20 +691,19 @@ async function restoreMarkers() {
       statusMsg.textContent = `✅ Found ${restoredCount} hidden items! Click red dots to view.`;
       statusMsg.style.color = "#28a745";
 
-      // Add pulse animation for visual feedback
       if (!document.querySelector('#pulse-animation')) {
         const style = document.createElement('style');
         style.id = 'pulse-animation';
         style.textContent = `
-          @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.3); }
-            100% { transform: scale(1); }
-          }
-        `;
+              @keyframes pulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.3); }
+                100% { transform: scale(1); }
+              }
+            `;
         document.head.appendChild(style);
       }
-      // Animate markers
+
       setTimeout(() => {
         const markers = document.querySelectorAll('.note-marker');
         markers.forEach(marker => {
@@ -859,14 +726,27 @@ async function restoreMarkers() {
   }
 }
 
-/**************** UTILITY FUNCTIONS *********************/
-// Add keyboard shortcuts
+// Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.key === 's') {
     e.preventDefault();
     saveBtn.click();
   }
+  if (e.key === 'Escape') {
+    closeTextModal();
+    cancelAudioRecording();
+  }
 });
 
-// Initialize drop zone visibility
-dropZone.classList.add('show');
+// Close modals on overlay click
+document.getElementById('textModal').addEventListener('click', (e) => {
+  if (e.target.id === 'textModal') {
+    closeTextModal();
+  }
+});
+
+document.getElementById('audioModal').addEventListener('click', (e) => {
+  if (e.target.id === 'audioModal') {
+    cancelAudioRecording();
+  }
+});
