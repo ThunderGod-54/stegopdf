@@ -10,8 +10,6 @@ const viewer = document.getElementById("viewer");
 const saveBtn = document.getElementById("savePdfBtn");
 const statusMsg = document.getElementById("statusMsg");
 const stegoViewUpload = document.getElementById("stegoViewUpload");
-const dropZone = document.getElementById("dropZone");
-
 let pdfDoc = null;
 let pdfBase64 = null;
 let pageMarkers = {};
@@ -55,36 +53,6 @@ if (stegoViewUpload) {
     handlePdfLoad(e.target.files[0], "Scanning for hidden data...", true);
   };
 }
-
-// Drag & drop for images
-dropZone.addEventListener('click', () => {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.onchange = async (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      alert('Select a location on the PDF to embed this image');
-      // The image will be handled when user clicks on PDF
-    }
-  };
-  input.click();
-});
-
-dropZone.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  dropZone.style.borderColor = '#28a745';
-});
-
-dropZone.addEventListener('drop', async (e) => {
-  e.preventDefault();
-  dropZone.style.borderColor = '#007bff';
-
-  const file = e.dataTransfer.files[0];
-  if (file && file.type.startsWith('image/')) {
-    alert('Select a location on the PDF to embed this image');
-  }
-});
 
 async function handlePdfLoad(file, successMsg, isViewMode = false) {
   if (!file) return;
@@ -258,58 +226,99 @@ async function recordAudio(p, x, y, wrap) {
     alert("Microphone access denied or not available.");
   }
 }
-/**************** MARKER UI *********************/
 function addMarker(pageNum, x, y, type, content, wrap, isNew) {
-  // Create marker element
   const m = document.createElement("div");
   m.className = "note-marker";
-  m.style = `left:${x - 11}px; top:${y - 11}px;`;
+  m.style = `left:${x - 12}px; top:${y - 12}px;`;
   m.dataset.type = type;
-  m.dataset.page = pageNum;
-  m.dataset.x = x;
-  m.dataset.y = y;
 
-  // Store content on the element
   m.cachedContent = content;
 
-  // Add click event to reveal
+  // Track if we are dragging to prevent accidental "clicks"
+  let isDragging = false;
+
   m.onclick = (e) => {
     e.stopPropagation();
-    revealMarker(m, wrap);
+    // Only reveal if we weren't just moving the dot
+    if (!isDragging) {
+      revealMarker(m, wrap);
+    }
   };
 
+  m.onmousedown = function (event) {
+    if (event.button !== 0) return;
+
+    isDragging = false; // Reset dragging state on new click
+    let startX = event.clientX;
+    let startY = event.clientY;
+
+    let shiftX = event.clientX - m.getBoundingClientRect().left;
+    let shiftY = event.clientY - m.getBoundingClientRect().top;
+
+    function moveAt(pageX, pageY) {
+      const rect = wrap.getBoundingClientRect();
+      let newX = pageX - rect.left - shiftX;
+      let newY = pageY - rect.top - shiftY;
+      m.style.left = newX + 'px';
+      m.style.top = newY + 'px';
+    }
+
+    function onMouseMove(event) {
+      // If mouse moves more than 3 pixels, consider it a drag
+      if (Math.abs(event.clientX - startX) > 3 || Math.abs(event.clientY - startY) > 3) {
+        isDragging = true;
+      }
+      moveAt(event.clientX, event.clientY);
+    }
+
+    document.addEventListener('mousemove', onMouseMove);
+
+    m.onmouseup = function () {
+      document.removeEventListener('mousemove', onMouseMove);
+
+      const finalX = parseInt(m.style.left) + 12;
+      const finalY = parseInt(m.style.top) + 12;
+
+      updateMarkerPosition(pageNum, x, y, finalX, finalY);
+
+      x = finalX;
+      y = finalY;
+
+      // Small delay to ensure the 'click' event handler knows we were dragging
+      setTimeout(() => { isDragging = false; }, 100);
+      m.onmouseup = null;
+    };
+  };
+
+  m.ondragstart = () => false;
   wrap.appendChild(m);
 
-  // Store in pageMarkers array if it's new
   if (isNew) {
     if (!pageMarkers[pageNum]) pageMarkers[pageNum] = [];
-    pageMarkers[pageNum].push({
-      x: Math.round(x),
-      y: Math.round(y),
-      type,
-      content
-    });
+    pageMarkers[pageNum].push({ x: Math.round(x), y: Math.round(y), type, content });
   }
 }
 
 function revealMarker(m, wrap) {
-  // Remove any existing popup first
   const existing = wrap.querySelector('.note-popup');
   if (existing) existing.remove();
 
   const type = m.dataset.type;
   const content = m.cachedContent;
-  const x = parseInt(m.style.left) + 22;
-  const y = parseInt(m.style.top);
+
+  // Calculate popup position relative to the marker's current position
+  const mLeft = parseInt(m.style.left);
+  const mTop = parseInt(m.style.top);
 
   const display = document.createElement("div");
   display.className = "note-popup";
-  display.style = `left:${x}px; top:${y}px;`;
+  // Position popup to the right of the dot
+  display.style = `left:${mLeft + 30}px; top:${mTop}px;`;
 
   if (type === "text") {
     display.innerHTML = `
       <div style="margin-bottom:5px; font-weight:bold;">📝 Hidden Text:</div>
-      <div style="max-height:200px; overflow-y:auto;">${content}</div>
+      <div style="max-height:200px; overflow-y:auto; word-break: break-all; white-space: pre-wrap;">${content}</div>
     `;
   } else if (type === "image") {
     const blob = new Blob([content], { type: "image/jpeg" });
@@ -327,25 +336,17 @@ function revealMarker(m, wrap) {
     `;
   }
 
-  // Add close button
   const closeBtn = document.createElement("button");
   closeBtn.innerHTML = "✕ Close";
-  closeBtn.style = `
-    margin-top:10px;
-    padding:4px 12px;
-    background:#6c757d;
-    color:white;
-    border:none;
-    border-radius:4px;
-    cursor:pointer;
-    font-size:12px;
-  `;
-  closeBtn.onclick = () => display.remove();
+  closeBtn.style = `margin-top:10px; padding:4px 12px; background:#6c757d; color:white; border:none; border-radius:4px; cursor:pointer; font-size:12px; width: 100%;`;
+  closeBtn.onclick = (e) => {
+    e.stopPropagation();
+    display.remove();
+  };
   display.appendChild(closeBtn);
 
   wrap.appendChild(display);
 }
-
 function closePopup() {
   const p = document.getElementById("stegoPopup");
   if (p) p.remove();
@@ -364,37 +365,26 @@ saveBtn.onclick = async () => {
     const { PDFDocument } = PDFLib;
     const pdfLibDoc = await PDFDocument.load(Uint8Array.from(atob(pdfBase64), c => c.charCodeAt(0)));
 
-    let idCounter = 0;
     let metadataEntries = [];
 
-    // Process all markers
     for (const pageNum in pageMarkers) {
       const markers = pageMarkers[pageNum] || [];
 
       for (const m of markers) {
-        idCounter++;
-
         if (m.type === "text") {
-          // Compress text and add to metadata
           const compressed = await compressText(m.content);
           metadataEntries.push(`${pageNum}|${m.x}|${m.y}|ztext|${compressed}`);
         } else {
-          // For binary data (images/audio), convert to Base64 and store in metadata
-          // This avoids the PDF-Lib attachment retrieval issue
-          const base64Data = btoa(String.fromCharCode(...new Uint8Array(m.content)));
-
-          // Store in metadata with the actual data
-          metadataEntries.push(`${pageNum}|${m.x}|${m.y}|${m.type}|${base64Data}`);
-
-          // Still attach to PDF for compatibility (optional)
-          try {
-            const id = `stego_${idCounter}_${m.type}.bin`;
-            await pdfLibDoc.attach(m.content, id, {
-              mimeType: m.type === "image" ? "image/jpeg" : "audio/webm"
-            });
-          } catch (attachError) {
-            console.warn("Failed to attach file to PDF:", attachError);
+          // FIX: Improved Binary to Base64 conversion for large images/audio
+          let binary = '';
+          const bytes = new Uint8Array(m.content);
+          const len = bytes.byteLength;
+          for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
           }
+          const base64Data = btoa(binary);
+
+          metadataEntries.push(`${pageNum}|${m.x}|${m.y}|${m.type}|${base64Data}`);
         }
       }
     }
@@ -405,21 +395,17 @@ saveBtn.onclick = async () => {
       return;
     }
 
-    // Save metadata in keywords field - must be an ARRAY for PDF-Lib
     const metadataString = JSON.stringify({
-      version: "2.0", // New version indicates Base64 storage
+      version: "2.0",
       timestamp: new Date().toISOString(),
       markers: metadataEntries
     });
 
-    // Create keywords array - FIRST set dummy keywords, then add our metadata
-    const keywordsArray = ["research", "notes", "draft", "confidential", metadataString];
-    pdfLibDoc.setKeywords(keywordsArray);
+    // We store the data in the "Keywords" field of the PDF
+    pdfLibDoc.setKeywords([metadataString]);
 
-    // Save PDF
     const pdfBytes = await pdfLibDoc.save();
 
-    // Create download link
     const blob = new Blob([pdfBytes], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -430,17 +416,16 @@ saveBtn.onclick = async () => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    statusMsg.textContent = `✅ PDF saved with ${metadataEntries.length} hidden items!`;
+    statusMsg.textContent = `✅ PDF saved successfully!`;
     statusMsg.style.color = "#28a745";
 
   } catch (err) {
     console.error("Save failed:", err);
-    statusMsg.textContent = "❌ Save failed: " + err.message;
+    statusMsg.textContent = "❌ Save failed. Image might be too large.";
     statusMsg.style.color = "#dc3545";
     alert("Save failed: " + err.message);
   }
 };
-
 /**************** RESTORE (METADATA + DECOMPRESSION) - UPDATED FOR ARRAY *********************/
 async function restoreMarkers() {
   try {
