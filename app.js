@@ -24,15 +24,41 @@ const sunIcon = document.getElementById('sunIcon');
 const moonIcon = document.getElementById('moonIcon');
 
 themeToggle.addEventListener('click', () => {
+  // Add animation class
+  themeToggle.classList.add('animate');
+
+  // Toggle theme classes
   document.body.classList.toggle('dark-theme');
   document.body.classList.toggle('light-theme');
 
+  // Fade icons using opacity
   if (document.body.classList.contains('dark-theme')) {
-    sunIcon.style.display = 'none';
-    moonIcon.style.display = 'block';
+    sunIcon.style.opacity = '0';
+    moonIcon.style.opacity = '1';
   } else {
-    sunIcon.style.display = 'block';
+    sunIcon.style.opacity = '1';
+    moonIcon.style.opacity = '0';
+  }
+
+  // Remove animation class after animation completes
+  setTimeout(() => {
+    themeToggle.classList.remove('animate');
+  }, 600);
+  // Updated Fade + Display logic
+  if (document.body.classList.contains('dark-theme')) {
+    // Hide Sun, Show Moon
+    sunIcon.style.display = 'none';
+    sunIcon.style.opacity = '0';
+
+    moonIcon.style.display = 'block';
+    setTimeout(() => moonIcon.style.opacity = '1', 10);
+  } else {
+    // Hide Moon, Show Sun
     moonIcon.style.display = 'none';
+    moonIcon.style.opacity = '0';
+
+    sunIcon.style.display = 'block';
+    setTimeout(() => sunIcon.style.opacity = '1', 10);
   }
 });
 

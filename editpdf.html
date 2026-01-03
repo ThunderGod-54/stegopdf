@@ -728,71 +728,86 @@
             background: rgba(108, 117, 125, 0.3);
         }
 
-        /* Audio Recording Modal */
-        .recording-container {
-            text-align: center;
-            padding: 20px;
-        }
+        /* Container for the button */
+.recording-container {
+    text-align: center;
+    padding: 20px;
+}
 
-        .recording-button {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #ff3e3e, #ff6b35);
-            border: none;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 30px auto;
-            box-shadow: 0 8px 30px rgba(255, 62, 62, 0.4);
-            transition: all 0.3s ease;
-            position: relative;
-        }
+/* The Premium Button */
+.recording-button {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    /* Vibrant Coral to Orange gradient */
+    background: linear-gradient(135deg, #ff4b2b, #ff416c);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 30px auto;
+    
+    /* Layered shadows for a "floating" effect */
+    box-shadow: 
+        0 10px 25px rgba(255, 75, 43, 0.3),
+        inset 0 -4px 10px rgba(0, 0, 0, 0.1),
+        inset 0 4px 10px rgba(255, 255, 255, 0.2);
+    
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    position: relative;
+    outline: none;
+}
 
-        .recording-button:hover {
-            transform: scale(1.05);
-            box-shadow: 0 12px 40px rgba(255, 62, 62, 0.6);
-        }
+/* Hover State */
+.recording-button:hover {
+    transform: scale(1.08) translateY(-5px);
+    box-shadow: 0 15px 35px rgba(255, 75, 43, 0.5);
+    filter: brightness(1.1);
+}
 
-        .recording-button.recording {
-            animation: recordPulse 1.5s ease-in-out infinite;
-        }
+/* Active/Click State */
+.recording-button:active {
+    transform: scale(0.95);
+}
 
-        @keyframes recordPulse {
+/* SVG Icon Styling */
+.recording-button svg {
+    width: 48px;
+    height: 48px;
+    color: white; /* Controls stroke color */
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+    transition: transform 0.3s ease;
+}
 
-            0%,
-            100% {
-                box-shadow: 0 8px 30px rgba(255, 62, 62, 0.4);
-            }
+/* Animation when the 'recording' class is added via JS */
+.recording-button.recording {
+    animation: premiumPulse 2s infinite;
+    background: linear-gradient(135deg, #ff0000, #ff4b2b);
+}
 
-            50% {
-                box-shadow: 0 8px 40px rgba(255, 62, 62, 0.8),
-                    0 0 0 20px rgba(255, 62, 62, 0.1),
-                    0 0 0 40px rgba(255, 62, 62, 0.05);
-            }
-        }
+.recording-button.recording svg {
+    animation: iconShake 0.5s infinite alternate;
+}
 
-        .recording-button svg {
-            width: 48px;
-            height: 48px;
-            fill: white;
-        }
+/* The Pulse Effect */
+@keyframes premiumPulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 75, 43, 0.7), 0 10px 25px rgba(255, 75, 43, 0.3);
+    }
+    70% {
+        box-shadow: 0 0 0 25px rgba(255, 75, 43, 0), 0 10px 25px rgba(255, 75, 43, 0.3);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(255, 75, 43, 0), 0 10px 25px rgba(255, 75, 43, 0.3);
+    }
+}
 
-        .recording-status {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: 10px;
-        }
-
-        .recording-time {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--accent-cyan);
-            font-family: 'Courier New', monospace;
-            margin-bottom: 20px;
-        }
+/* Subtle icon vibration while recording */
+@keyframes iconShake {
+    from { transform: scale(1); }
+    to { transform: scale(1.1); }
+}
 
         /* Scrollbar */
         #viewer::-webkit-scrollbar {
@@ -856,7 +871,7 @@
         /* Micro-interaction for theme toggle */
         .theme-toggle {
             transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            transform: translateX(100px);
+            transform: translateX(0px);
             /* Start off-screen */
         }
 
@@ -971,11 +986,19 @@
                 <div class="recording-status" id="recordStatus">Click to start recording</div>
                 <div class="recording-time" id="recordTime">00:00</div>
                 <button class="recording-button" id="recordButton">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                        <line x1="12" y1="19" x2="12" y2="23" />
-                        <line x1="8" y1="23" x2="16" y2="23" />
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
+                        stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <!-- Mic body -->
+                        <rect x="9" y="2" width="6" height="12" rx="3" />
+                    
+                        <!-- Mic stand -->
+                        <path d="M5 10v2a7 7 0 0 0 14 0v-2" />
+                    
+                        <!-- Stem -->
+                        <line x1="12" y1="19" x2="12" y2="22" />
+                    
+                        <!-- Base -->
+                        <line x1="8" y1="22" x2="16" y2="22" />
                     </svg>
                 </button>
                 <div class="modal-buttons">
@@ -990,4 +1013,5 @@
     <script src="app.js"></script>
     </script>
 </body>
+
 </html>
