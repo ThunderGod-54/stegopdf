@@ -1433,12 +1433,25 @@
     <!-- Text Input Modal -->
     <div class="modal-overlay" id="textModal">
         <div class="modal-content">
-            <div class="modal-header">📝 Enter Secret Message</div>
+            <div class="modal-header" style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 7V4h16v3M12 4v16M9 20h6"></path>
+                </svg>
+                <span>Enter Secret Message</span>
+            </div>
             <textarea class="modal-input" id="textInput"
                 placeholder="Type your secret message here... (will be compressed automatically)"></textarea>
             <div class="modal-buttons">
                 <button class="modal-btn modal-btn-secondary" onclick="closeTextModal()">Cancel</button>
-                <button class="modal-btn modal-btn-primary" onclick="saveTextMessage()">Add Message</button>
+                <button class="modal-btn modal-btn-primary" onclick="saveTextMessage()"
+                    style="display: flex; align-items: center; gap: 8px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    Add Message
+                </button>
             </div>
         </div>
     </div>
@@ -1446,10 +1459,22 @@
     <!-- Audio Recording Modal -->
     <div class="modal-overlay" id="audioModal">
         <div class="modal-content">
-            <div class="modal-header">🎤 Record Audio Message</div>
+            <div class="modal-header" style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+                <span>Record Audio Message</span>
+            </div>
             <div class="recording-container">
-                <div class="recording-status" id="recordStatus">Click to start recording</div>
-                <div class="recording-time" id="recordTime">00:00</div>
+                <div class="recording-status" id="recordStatus" style="color: var(--text-primary);">Click to start recording
+                </div>
+                <div class="recording-time" id="recordTime"
+                    style="color: var(--accent-cyan); font-weight: bold; font-family: monospace; font-size: 1.2rem; margin: 10px 0;">
+                    00:00</div>
                 <button class="recording-button" id="recordButton">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none"
                         stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
