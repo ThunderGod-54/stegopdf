@@ -17,6 +17,128 @@ let recordingStream = null;
 let recordingTimer = null;
 let recordingSeconds = 0;
 let tempRecordingData = null;
+let currentZoom = 1.5;
+let minZoom = 0.5;
+let maxZoom = 3.0;
+let zoomTimeout = null;
+let currentDisplayedWidth = 0;
+let currentDisplayedHeight = 0;
+let pdfTextContent = ''; // Store extracted PDF text for chatbot context
+let isSnippingMode = false;
+let snipStartX = 0;
+let snipStartY = 0;
+let snipRect = null;
+
+// Replace your existing zoom functions with these:
+function zoomIn() { setZoom(currentZoom * 1.06); }
+function zoomOut() { setZoom(currentZoom / 1.06); }
+
+function setZoom(zoomLevel) {
+  const oldZoom = currentZoom;
+  currentZoom = Math.max(minZoom, Math.min(maxZoom, zoomLevel));
+  const ratio = currentZoom / oldZoom;
+
+  const wraps = document.querySelectorAll('.pageWrapper');
+  wraps.forEach(wrap => {
+    // Get current dimensions from style or offset
+    const currentW = parseFloat(wrap.style.width) || wrap.offsetWidth;
+    const currentH = parseFloat(wrap.style.height) || wrap.offsetHeight;
+
+    // 1. Update wrapper size smoothly (CSS transition handles the animation)
+    wrap.style.width = (currentW * ratio) + 'px';
+    wrap.style.height = (currentH * ratio) + 'px';
+
+    // 2. Move markers along with the zoom ratio
+    const markers = wrap.querySelectorAll('.note-marker');
+    markers.forEach(m => {
+      const mLeft = parseFloat(m.style.left) || 0;
+      const mTop = parseFloat(m.style.top) || 0;
+
+      // Use +12 to find the marker center, multiply by ratio, then -12 to re-offset
+      const newX = ((mLeft + 12) * ratio) - 12;
+      const newY = ((mTop + 12) * ratio) - 12;
+
+      m.style.left = newX + 'px';
+      m.style.top = newY + 'px';
+    });
+  });
+
+  throttledReRender();
+}
+
+function throttledReRender() {
+  if (zoomTimeout) clearTimeout(zoomTimeout);
+  zoomTimeout = setTimeout(() => {
+    // We only re-draw high-resolution content AFTER the smooth animation finishes
+    reRenderPages();
+  }, 300);
+}
+
+async function reRenderPages() {
+  if (!pdfDoc) return;
+  const wraps = document.querySelectorAll('.pageWrapper');
+
+  for (let i = 0; i < wraps.length; i++) {
+    const wrap = wraps[i];
+    const pageNum = i + 1;
+    const page = await pdfDoc.getPage(pageNum);
+    const vp = page.getViewport({ scale: currentZoom });
+
+    // FIX FOR VANISHING CONTENT: Update canvas resolution to match current zoom
+    const canvas = wrap.querySelector('canvas');
+    canvas.width = vp.width;
+    canvas.height = vp.height;
+
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear to prevent ghosting
+
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  }
+}
+// Mouse wheel zoom (Ctrl + scroll for zoom)
+viewer.addEventListener('wheel', (e) => {
+  if (e.ctrlKey) {
+    e.preventDefault();
+    if (e.deltaY < 0) {
+      zoomIn();
+    } else {
+      zoomOut();
+    }
+  }
+}, { passive: false });
+
+// Touch zoom
+let initialDistance = null;
+let initialZoom = null;
+
+viewer.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    const touch1 = e.touches[0];
+    const touch2 = e.touches[1];
+    initialDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+    initialZoom = currentZoom;
+  }
+});
+
+viewer.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 2 && initialDistance !== null) {
+    e.preventDefault();
+    const touch1 = e.touches[0];
+    const touch2 = e.touches[1];
+    const currentDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+    const zoomFactor = currentDistance / initialDistance;
+    const newZoom = initialZoom * zoomFactor;
+    setZoom(newZoom);
+  }
+});
+
+viewer.addEventListener('touchend', (e) => {
+  if (e.touches.length < 2) {
+    initialDistance = null;
+    initialZoom = null;
+  }
+});
 
 // Theme Toggle
 // Theme Toggle
@@ -161,10 +283,12 @@ async function handlePdfLoad(file, successMsg, isViewMode = false) {
 }
 
 async function renderAllPages() {
+  pdfTextContent = ''; // Reset text content
+
   for (let p = 1; p <= pdfDoc.numPages; p++) {
     try {
       const page = await pdfDoc.getPage(p);
-      const vp = page.getViewport({ scale: 1.5 });
+      const vp = page.getViewport({ scale: currentZoom });
       const wrap = document.createElement("div");
       wrap.className = "pageWrapper";
       wrap.style = `width:${vp.width}px; height:${vp.height}px; position:relative; margin:0 auto 30px auto; box-shadow:0 4px 20px rgba(0,0,0,0.4); background:white;`;
@@ -173,11 +297,16 @@ async function renderAllPages() {
       const canvas = document.createElement("canvas");
       canvas.width = vp.width;
       canvas.height = vp.height;
-      canvas.style.cursor = "crosshair";
+      canvas.style = `width:100%; height:100%; cursor:crosshair;`;
       wrap.appendChild(canvas);
       viewer.appendChild(wrap);
 
       await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+
+      // Extract text content from the page
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(item => item.str).join(' ');
+      pdfTextContent += `Page ${p}: ${pageText}\n\n`;
 
       canvas.onclick = (e) => openPopupMenu(e, wrap, p);
       pageMarkers[p] = [];
@@ -185,6 +314,11 @@ async function renderAllPages() {
     } catch (error) {
       console.error(`Error rendering page ${p}:`, error);
     }
+  }
+
+  // Update chatbot context with PDF text
+  if (window.chatbotInstance) {
+    window.chatbotInstance.addContext(pdfTextContent);
   }
 }
 
@@ -317,12 +451,51 @@ function openPopupMenu(e, wrap, pageNum) {
   popup.className = "menuBox";
   popup.style = `left:${x}px; top:${y}px;`;
   popup.innerHTML = `
-        <div style="font-weight:bold; margin-bottom:5px;">Add Hidden Data:</div>
-        <button id="btnText" style="background:#28a745;">📝 Text</button>
-        <button id="btnImg" style="background:#6f42c1;">🖼️ Image</button>
-        <button id="btnAudio" style="background:#fd7e14;">🎤 Audio</button>
-        <button onclick="closePopup()" style="background:#dc3545;">✕ Cancel</button>
-      `;
+    <style>
+      #stegoPopup button {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        padding: 8px 12px;
+        margin-bottom: 6px;
+        border: none;
+        border-radius: 6px;
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.2s;
+      }
+      #stegoPopup button svg { width: 18px; height: 18px; stroke: currentColor; }
+      #stegoPopup button:hover { opacity: 0.9; }
+    </style>
+    <div style="font-weight:bold; margin-bottom:10px; color: #333; text-align:center;">Add Hidden Data:</div>
+    
+    <button id="btnText" style="background:#28a745; display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; margin-bottom: 6px; border: none; border-radius: 6px; color: white; font-weight: 600; cursor: pointer;">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 7V4h16v3M12 4v16M9 20h6"></path>
+      </svg>Text
+    </button>
+    
+    <button id="btnImg" style="background:#6f42c1;">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+      Image
+    </button>
+    
+    <button id="btnAudio" style="background:#fd7e14;">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+      Audio
+    </button>
+    
+    <button id="btnSnip" style="background:#17a2b8;">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>
+      Snip
+    </button>
+    
+    <button onclick="closePopup()" style="background:#dc3545; justify-content: center; margin-top: 4px;">
+      ✕ Cancel
+    </button>
+  `;
 
   wrap.appendChild(popup);
 
@@ -349,6 +522,11 @@ function openPopupMenu(e, wrap, pageNum) {
 
   document.getElementById("btnAudio").onclick = () => {
     openAudioModal(pageNum, x, y, wrap);
+    closePopup();
+  };
+
+  document.getElementById("btnSnip").onclick = () => {
+    startSnippingMode(pageNum, wrap);
     closePopup();
   };
 }
@@ -447,99 +625,262 @@ function updateMarkerPosition(pageNum, oldX, oldY, newX, newY) {
     marker.x = Math.round(newX);
     marker.y = Math.round(newY);
   }
-}
-
-function revealMarker(m, wrap) {
+} function revealMarker(m, wrap) {
   const existing = wrap.querySelector('.note-popup');
   if (existing) existing.remove();
 
   const type = m.dataset.type;
   const content = m.cachedContent;
-
   const mLeft = parseInt(m.style.left);
   const mTop = parseInt(m.style.top);
 
   const display = document.createElement("div");
   display.className = "note-popup";
-  display.style = `left:${mLeft + 30}px; top:${mTop}px;`;
 
+  // Position it near the dot
+  display.style.left = `${mLeft + 25}px`;
+  display.style.top = `${mTop}px`;
+
+  // 1. GENERATE CONTENT BASED ON TYPE
   if (type === "text") {
     display.innerHTML = `
-          <div class="note-popup-header">📝 Hidden Text:</div>
-          <div class="note-popup-content">${content}</div>
-        `;
+      <div class="note-popup-header" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; padding-right: 45px;">
+        <span style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: black;">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 7V4h16v3M12 4v16M9 20h6"></path>
+          </svg>
+          Hidden Text:
+        </span>
+        <button id="copyBtn" title="Copy Text" style="background: none; border: none; cursor: pointer; padding: 5px; display: flex; align-items: center;">
+          <svg id="copyIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: black; transition: all 0.2s;">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="note-popup-content" style="padding: 15px; min-height: 60px; color: black;">${content}</div>
+    `;
+
+    // Copy Button logic
+    const copyBtn = display.querySelector("#copyBtn");
+    const copyIcon = display.querySelector("#copyIcon");
+    copyBtn.onclick = (e) => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(content).then(() => {
+        copyIcon.innerHTML = `<polyline points="20 6 9 17 4 12"></polyline>`;
+        copyIcon.style.color = "#28a745";
+        setTimeout(() => {
+          copyIcon.innerHTML = `
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          `;
+          copyIcon.style.color = "var(--text-primary)";
+        }, 2000);
+      });
+    };
+
   } else if (type === "image") {
     const blob = new Blob([content], { type: "image/jpeg" });
     const url = URL.createObjectURL(blob);
-
-    // Find marker data
     const pageNum = parseInt(wrap.id.split('-')[1]);
     const markerX = parseInt(m.style.left) + 12;
     const markerY = parseInt(m.style.top) + 12;
-    const marker = pageMarkers[pageNum].find(mark => mark.x === markerX && mark.y === markerY && mark.type === 'image');
-    const size = marker ? marker.size : { width: 250, height: 250 };
+    const marker = pageMarkers[pageNum].find(mark => Math.abs(mark.x - markerX) < 5 && mark.type === 'image');
+    const savedSize = marker && marker.size ? marker.size : { width: 250, height: 250 };
 
     display.innerHTML = `
-          <div class="note-popup-header">🖼️ Hidden Image:</div>
-          <div class="note-popup-content">
-            <img src="${url}" style="width:${size.width}px; height:${size.height}px; border-radius:4px; resize: both; overflow: hidden;">
-          </div>
-        `;
+      <div class="note-popup-header" style="display: flex; align-items: center; padding: 10px 15px; padding-right: 45px;">
+        <span style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: black;">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+            <polyline points="21 15 16 10 5 21"></polyline>
+          </svg>
+          Hidden Image:
+        </span>
+      </div>
+      <div class="note-popup-content" style="width:${savedSize.width}px; height:${savedSize.height}px; overflow: hidden; resize: both; cursor: nwse-resize;">
+        <img src="${url}" style="width: 100%; height: 100%; object-fit: contain; pointer-events: none;">
+      </div>
+    `;
 
-    // Adjust size to fit image if default size
-    const img = display.querySelector('img');
-    img.onload = () => {
-      if (size.width === 250 && size.height === 250) {
-        img.style.width = img.naturalWidth + 'px';
-        img.style.height = img.naturalHeight + 'px';
-        if (marker) {
-          marker.size = { width: img.naturalWidth, height: img.naturalHeight };
-        }
-      }
-    };
   } else if (type === "audio") {
     const blob = new Blob([content], { type: "audio/webm" });
     const url = URL.createObjectURL(blob);
     display.innerHTML = `
-          <div class="note-popup-header">🎤 Hidden Audio:</div>
-          <div class="note-popup-content">
-            <audio src="${url}" controls style="width:250px; height:40px;"></audio>
-          </div>
-        `;
+      <div class="note-popup-header" style="display: flex; align-items: center; padding: 10px 15px; padding-right: 45px;">
+        <span style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: black;">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="23"></line>
+            <line x1="8" y1="23" x2="16" y2="23"></line>
+          </svg>
+          Hidden Audio:
+        </span>
+      </div>
+      <div class="note-popup-content" style="padding: 15px;">
+        <audio src="${url}" controls style="width:250px; height:40px;"></audio>
+      </div>
+    `;
   }
 
+  // 2. CREATE AND ATTACH YOUR ORIGINAL UNIFIED CLOSE BUTTON
   const closeBtn = document.createElement("button");
   closeBtn.innerHTML = "✕";
-  closeBtn.style = `position:absolute; top:10px; right:10px; padding:4px 8px; background:#6c757d; color:white; border:none; border-radius:4px; cursor:pointer; font-size:14px; font-weight:bold;`;
+  // Added a default background color and high z-index
+  closeBtn.style = `position:absolute; top:10px; right:10px; padding:4px 8px; background:#6c757d; color:white; border:none; border-radius:4px; cursor:pointer; font-size:14px; font-weight:bold; z-index: 10001;`;
+
   closeBtn.onclick = (e) => {
     e.stopPropagation();
 
-    // Save image size if resized
+    // Shared Save logic for Resizing
     if (type === "image") {
-      const img = display.querySelector('img');
-      if (img) {
-        const newWidth = img.clientWidth;
-        const newHeight = img.clientHeight;
+      const contentBox = display.querySelector('.note-popup-content');
+      if (contentBox) {
+        const newWidth = contentBox.clientWidth;
+        const newHeight = contentBox.clientHeight;
         const pageNum = parseInt(wrap.id.split('-')[1]);
         const markerX = parseInt(m.style.left) + 12;
         const markerY = parseInt(m.style.top) + 12;
-        const marker = pageMarkers[pageNum].find(mark => mark.x === markerX && mark.y === markerY && mark.type === 'image');
+        const marker = pageMarkers[pageNum].find(mark => Math.abs(mark.x - markerX) < 5 && mark.type === 'image');
         if (marker) {
           marker.size = { width: newWidth, height: newHeight };
         }
       }
     }
-
     display.remove();
   };
-  display.appendChild(closeBtn);
 
+  display.appendChild(closeBtn);
   wrap.appendChild(display);
 }
-
 function closePopup() {
   const p = document.getElementById("stegoPopup");
   if (p) p.remove();
+}
+
+function startSnippingMode(pageNum, wrap) {
+  isSnippingMode = true;
+  statusMsg.textContent = "✂️ Snipping mode active. Click and drag to select text.";
+  statusMsg.style.color = "#17a2b8";
+
+  const canvas = wrap.querySelector('canvas');
+  canvas.style.cursor = 'crosshair';
+
+  let isDrawing = false;
+
+  const handleMouseDown = (e) => {
+    if (!isSnippingMode) return;
+    isDrawing = true;
+    const rect = canvas.getBoundingClientRect();
+    snipStartX = e.clientX - rect.left;
+    snipStartY = e.clientY - rect.top;
+    snipRect = document.createElement('div');
+    snipRect.style = `position:absolute; border:2px dashed #17a2b8; background:rgba(23,162,184,0.1); pointer-events:none;`;
+    wrap.appendChild(snipRect);
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDrawing || !isSnippingMode) return;
+    const rect = canvas.getBoundingClientRect();
+    const currentX = e.clientX - rect.left;
+    const currentY = e.clientY - rect.top;
+
+    const width = Math.abs(currentX - snipStartX);
+    const height = Math.abs(currentY - snipStartY);
+    const left = Math.min(currentX, snipStartX);
+    const top = Math.min(currentY, snipStartY);
+
+    snipRect.style.left = left + 'px';
+    snipRect.style.top = top + 'px';
+    snipRect.style.width = width + 'px';
+    snipRect.style.height = height + 'px';
+  };
+
+  const handleMouseUp = async (e) => {
+    if (!isDrawing || !isSnippingMode) return;
+    isDrawing = false;
+    isSnippingMode = false;
+    canvas.style.cursor = 'crosshair';
+
+    const rect = canvas.getBoundingClientRect();
+    const endX = e.clientX - rect.left;
+    const endY = e.clientY - rect.top;
+
+    const minX = Math.min(snipStartX, endX);
+    const maxX = Math.max(snipStartX, endX);
+    const minY = Math.min(snipStartY, endY);
+    const maxY = Math.max(snipStartY, endY);
+
+    // Extract text from the selected area
+    const selectedText = await extractTextFromArea(pageNum, minX, minY, maxX, maxY);
+
+    if (selectedText.trim()) {
+      // Add snipped text to chatbot context and show tagged message
+      if (window.chatbotInstance) {
+        window.chatbotInstance.addSnippedText(selectedText);
+        statusMsg.textContent = "✅ Text snipped and added to chatbot context!";
+        statusMsg.style.color = "#28a745";
+
+        // Show chatbot if hidden
+        const chatbotContainer = document.getElementById('chatbot-container');
+        const mainContent = document.querySelector('.main-content');
+        if (chatbotContainer && chatbotContainer.classList.contains('hidden')) {
+          chatbotContainer.classList.remove('hidden');
+          mainContent.classList.add('chatbot-visible');
+        }
+      } else {
+        statusMsg.textContent = "⚠️ Chatbot not available. Snipped text: " + selectedText.substring(0, 50) + "...";
+        statusMsg.style.color = "#ffc107";
+      }
+    } else {
+      statusMsg.textContent = "⚠️ No text found in selected area.";
+      statusMsg.style.color = "#dc3545";
+    }
+
+    // Remove rectangle
+    if (snipRect) {
+      snipRect.remove();
+      snipRect = null;
+    }
+
+    // Remove event listeners
+    canvas.removeEventListener('mousedown', handleMouseDown);
+    canvas.removeEventListener('mousemove', handleMouseMove);
+    canvas.removeEventListener('mouseup', handleMouseUp);
+  };
+
+  canvas.addEventListener('mousedown', handleMouseDown);
+  canvas.addEventListener('mousemove', handleMouseMove);
+  canvas.addEventListener('mouseup', handleMouseUp);
+}
+
+async function extractTextFromArea(pageNum, minX, minY, maxX, maxY) {
+  try {
+    const page = await pdfDoc.getPage(pageNum);
+    const textContent = await page.getTextContent();
+    const viewport = page.getViewport({ scale: currentZoom });
+
+    let selectedText = '';
+
+    for (const item of textContent.items) {
+      const tx = item.transform[4] * currentZoom;
+      const ty = viewport.height - (item.transform[5] * currentZoom);
+      const tw = item.width * currentZoom;
+      const th = item.height * currentZoom;
+
+      // Check if text item overlaps with selection rectangle
+      if (tx < maxX && tx + tw > minX && ty < maxY && ty + th > minY) {
+        selectedText += item.str + ' ';
+      }
+    }
+
+    return selectedText.trim();
+  } catch (error) {
+    console.error('Error extracting text:', error);
+    return '';
+  }
 }
 
 /**************** SAVE (METADATA + COMPRESSION) *********************/
@@ -821,6 +1162,13 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeTextModal();
     cancelAudioRecording();
+    if (isSnippingMode) {
+      isSnippingMode = false;
+      statusMsg.textContent = "Snipping mode cancelled.";
+      statusMsg.style.color = "#dc3545";
+      const canvases = document.querySelectorAll('canvas');
+      canvases.forEach(canvas => canvas.style.cursor = 'crosshair');
+    }
   }
 });
 
