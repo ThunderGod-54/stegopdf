@@ -1,7 +1,3 @@
-Here is a professional and comprehensive **README.md** tailored for your **StegoPDF** project. It highlights the advanced features you've built, like binary layer injection, GZIP compression, and RAG-powered intelligence.
-
----
-
 # 🔐 StegoPDF | Stealth Protocol
 
 **Military-grade steganography. Hide data within PDF binary structures invisible to forensic scanners.**
