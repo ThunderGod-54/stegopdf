@@ -872,123 +872,196 @@
     const video = document.getElementById('protocol-video');
     const loaderVisual = document.getElementById('loader-visual');
     let chipShown = false;
-    launchBtn.addEventListener('click', (e) => {
-      e.preventDefault(); // Prevent immediate navigation
+  launchBtn.addEventListener('click', (e) => {
+    e.preventDefault();
 
-      // 1. Reveal Overlay
-      initOverlay.style.display = 'flex';
+    // 1. Reveal Overlay
+    initOverlay.style.display = 'flex';
+    console.log('Overlay displayed');
 
-      // 2. Animate the Loader Bar
-      let progress = { val: 0 };
-      const statusMessages = ["BYPASSING FIREWALLS...", "DECRYPTING LAYERS...", "PROTOCOL READY"];
-      let chipShown = false;
+    // 2. Animate the Loader Bar
+    let progress = { val: 0 };
+    const statusMessages = ["BYPASSING FIREWALLS...", "DECRYPTING LAYERS...", "PROTOCOL READY"];
+    let chipShown = false;
 
-      anime({
-        targets: progress,
-        val: 100,
-        duration: 3000,
-        easing: 'easeInOutQuad',
-        update: function () {
-          loaderBar.style.width = progress.val + '%';
-          loaderPct.innerHTML = Math.round(progress.val) + '%';
+    anime({
+      targets: progress,
+      val: 100,
+      duration: 3000,
+      easing: 'easeInOutQuad',
+      update: function () {
+        loaderBar.style.width = progress.val + '%';
+        loaderPct.innerHTML = Math.round(progress.val) + '%';
 
-          // Change text based on progress
-          if (progress.val > 30 && progress.val < 70) loaderText.innerHTML = statusMessages[0];
-          if (progress.val > 70) loaderText.innerHTML = statusMessages[1];
+        if (progress.val > 30 && progress.val < 70) loaderText.innerHTML = statusMessages[0];
+        if (progress.val > 70) loaderText.innerHTML = statusMessages[1];
 
-          // Show blue chip after "BYPASSING FIREWALLS" phase (only fade in)
-          if (progress.val > 50 && !chipShown) {
-            chipShown = true;
-            anime({
-              targets: '#skip-chip',
-              opacity: [0, 1],
-              duration: 600,
-              easing: 'easeOutQuad',
-              begin: () => {
-                document.getElementById('skip-chip').style.display = 'block';
-              }
-            });
-          }
-        },
-        complete: () => {
-          loaderText.innerHTML = statusMessages[2];
-
-          // 3. Transition from Loader to Video - ONLY FADE OUT LOADER, NOT CHIP
+        if (progress.val > 50 && !chipShown) {
+          chipShown = true;
+          console.log('Showing chip at 50% loading');
           anime({
-            targets: loaderVisual,
-            opacity: 0,
-            scale: 0.9,
-            duration: 500,
-            easing: 'easeInQuad',
-            complete: () => {
-              loaderVisual.style.display = 'none';
-              video.style.display = 'block';
-
-              // 4. Play Video with Audio
-              video.play();
-
-              // Show skip chip if not already shown
-              if (!chipShown) {
-                anime({
-                  targets: '#skip-chip',
-                  opacity: [0, 1],
-                  duration: 600,
-                  easing: 'easeOutQuad',
-                  begin: () => {
-                    document.getElementById('skip-chip').style.display = 'block';
-                  }
-                });
-              }
-
-              // 5. Skip functionality - tap anywhere to skip
-              const skipVideo = () => {
-                video.pause();
-                // Fade out chip with overlay
-                anime({
-                  targets: '#skip-chip',
-                  opacity: 0,
-                  duration: 300,
-                  easing: 'easeInQuad'
-                });
-                anime({
-                  targets: initOverlay,
-                  opacity: 0,
-                  duration: 800,
-                  easing: 'easeInOutQuad',
-                  complete: () => {
-                    window.location.href = 'editpdf.html';
-                  }
-                });
-              };
-
-              // Add click event to entire overlay for skipping
-              initOverlay.addEventListener('click', skipVideo);
-
-              // 6. Navigate to editpdf.html when video ends normally
-              video.onended = () => {
-                initOverlay.removeEventListener('click', skipVideo);
-                // Fade out chip
-                anime({
-                  targets: '#skip-chip',
-                  opacity: 0,
-                  duration: 300,
-                  easing: 'easeInQuad'
-                });
-                anime({
-                  targets: initOverlay,
-                  opacity: 0,
-                  duration: 1000,
-                  easing: 'linear',
-                  complete: () => {
-                    window.location.href = 'editpdf.html';
-                  }
-                });
-              };
+            targets: '#skip-chip',
+            opacity: [0, 1],
+            duration: 400,
+            easing: 'easeOutQuad',
+            begin: () => {
+              document.getElementById('skip-chip').style.display = 'block';
+              console.log('Chip is now visible');
             }
           });
         }
-      });
+      },
+      complete: () => {
+        loaderText.innerHTML = statusMessages[2];
+        console.log('Loader complete, transitioning to video');
+
+        // 3. Transition from Loader to Video
+        anime({
+          targets: loaderVisual,
+          opacity: 0,
+          scale: 0.9,
+          duration: 400,
+          easing: 'easeInQuad',
+          complete: () => {
+            loaderVisual.style.display = 'none';
+            video.style.display = 'block';
+            console.log('Video element displayed');
+
+            // Show chip if not already shown
+            if (!chipShown) {
+              console.log('Showing chip before video');
+              anime({
+                targets: '#skip-chip',
+                opacity: [0, 1],
+                duration: 300,
+                easing: 'easeOutQuad',
+                begin: () => {
+                  document.getElementById('skip-chip').style.display = 'block';
+                  console.log('Chip made visible');
+                }
+              });
+              chipShown = true;
+            }
+
+            // TRIPLE LAYER APPROACH to hide chip at 1.9 seconds
+            let chipHideAttempted = false;
+
+            // METHOD 1: ontimeupdate (most accurate) - CHANGED TO 1.9
+            video.ontimeupdate = function () {
+              console.log('Video time update:', video.currentTime.toFixed(2), 'seconds');
+
+              if (!chipHideAttempted && video.currentTime >= 1.9) { // CHANGED: 2.5 → 1.9
+                chipHideAttempted = true;
+                console.log('METHOD 1: Hiding chip at video time 1.9s');
+                hideChip();
+                video.ontimeupdate = null;
+              }
+            };
+
+            // METHOD 2: Fallback setTimeout based on video duration - CHANGED TO 1.9
+            video.onloadedmetadata = function () {
+              console.log('Video metadata loaded, duration:', video.duration, 'seconds');
+
+              // Set fallback timeout for 1.9 seconds (1900ms)
+              const fallbackTime = 1900; // CHANGED: 1.9 seconds
+              setTimeout(() => {
+                if (!chipHideAttempted) {
+                  chipHideAttempted = true;
+                  console.log('METHOD 2: Fallback timeout hiding chip at 1.9s');
+                  hideChip();
+                }
+              }, fallbackTime);
+            };
+
+            // METHOD 3: Absolute timeout as last resort - CHANGED TO 2500 (2.5s)
+            setTimeout(() => {
+              if (!chipHideAttempted) {
+                chipHideAttempted = true;
+                console.log('METHOD 3: Absolute timeout hiding chip');
+                hideChip();
+              }
+            }, 2500); // CHANGED: 5000 → 2500 (2.5 seconds absolute maximum)
+
+            // Chip hide function
+            function hideChip() {
+              const chip = document.getElementById('skip-chip');
+              if (chip && chip.style.display !== 'none') {
+                console.log('Executing chip hide animation at 1.9s');
+                anime({
+                  targets: chip,
+                  opacity: 0,
+                  duration: 600,
+                  easing: 'easeInOutQuad',
+                  begin: () => {
+                    console.log('Chip fade started');
+                  },
+                  complete: () => {
+                    chip.style.display = 'none';
+                    console.log('Chip completely hidden');
+                  }
+                });
+              } else {
+                console.log('Chip already hidden or not found');
+              }
+            }
+
+            // 4. Play Video
+            video.play().then(() => {
+              console.log('Video play successful, currentTime:', video.currentTime);
+            }).catch(err => {
+              console.error('Video play failed:', err);
+            });
+
+            // 5. Skip functionality
+            const skipVideo = () => {
+              console.log('Skip triggered');
+              video.pause();
+              video.ontimeupdate = null;
+
+              const chip = document.getElementById('skip-chip');
+              if (chip && chip.style.display !== 'none') {
+                anime({
+                  targets: chip,
+                  opacity: 0,
+                  duration: 200,
+                  easing: 'easeInQuad'
+                });
+              }
+
+              anime({
+                targets: initOverlay,
+                opacity: 0,
+                duration: 500,
+                easing: 'easeInOutQuad',
+                complete: () => {
+                  window.location.href = 'editpdf.html';
+                }
+              });
+            };
+
+            initOverlay.addEventListener('click', skipVideo);
+
+            // 6. Video end handler
+            video.onended = () => {
+              console.log('Video ended');
+              initOverlay.removeEventListener('click', skipVideo);
+              video.ontimeupdate = null;
+
+              anime({
+                targets: initOverlay,
+                opacity: 0,
+                duration: 700,
+                easing: 'easeInOutQuad',
+                complete: () => {
+                  window.location.href = 'editpdf.html';
+                }
+              });
+            };
+          }
+        });
+      }
     });
+  });
   </script>
 </body>
 </html>
