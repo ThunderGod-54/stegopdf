@@ -9,7 +9,7 @@ app.use(cors());
 app.use(express.json());
 
 /* 🔑 Your API Key */
-const GEMINI_API_KEY = "api-key-here"; // Replace with your actual API key
+const GEMINI_API_KEY = "api_key";
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
@@ -26,14 +26,40 @@ app.post("/chat", async (req, res) => {
             return res.status(400).json({ reply: "Empty message" });
         }
 
-        // System prompt and context handling
-        const prompt = `
-You are a helpful assistant.
-Context: ${Array.isArray(context) ? context.join("\n\n") : "None"}
-User: ${message}
-        `;
+        // Build multimodal content
+        const contents = [];
 
-        const result = await model.generateContent(prompt);
+        // Add system prompt
+        contents.push({ text: "You are a helpful assistant. Always structure your responses with clear formatting: Use **bold** for titles and important headings, add line breaks for paragraphs, use bullet points or numbered lists where appropriate, and ensure proper spacing for readability. Format your response in Markdown for better structure." });
+
+        // Process context
+        if (Array.isArray(context)) {
+            for (const item of context) {
+                if (item.startsWith("Image File:")) {
+                    // Extract base64 data
+                    const base64Match = item.match(/Base64 Data: (data:image\/[^;]+;base64,[^"]+)/);
+                    if (base64Match) {
+                        const base64Data = base64Match[1];
+                        const mimeType = base64Data.split(';')[0].split(':')[1];
+                        const data = base64Data.split(',')[1];
+                        contents.push({
+                            inlineData: {
+                                mimeType: mimeType,
+                                data: data
+                            }
+                        });
+                    }
+                } else {
+                    // Add as text
+                    contents.push({ text: item });
+                }
+            }
+        }
+
+        // Add user message
+        contents.push({ text: `User: ${message}` });
+
+        const result = await model.generateContent(contents);
         const response = await result.response;
         const reply = response.text();
 

@@ -157,6 +157,7 @@ viewer.addEventListener("touchend", (e) => {
 
 // Theme Toggle
 // Theme Toggle
+
 const themeToggle = document.getElementById("themeToggle");
 const sunIcon = document.getElementById("sunIcon");
 const moonIcon = document.getElementById("moonIcon");
