@@ -278,10 +278,10 @@ async function handlePdfLoad(file, successMsg, isViewMode = false) {
 
       if (isViewMode) {
         if (found) {
-          statusMsg.textContent = "✅ Hidden data found and loaded!";
+          statusMsg.textContent = "Hidden data found and loaded!";
           statusMsg.style.color = "#28a745";
         } else {
-          statusMsg.textContent = "⚠️ No hidden data found in this PDF.";
+          statusMsg.textContent = "No hidden data found in this PDF.";
           statusMsg.style.color = "#dc3545";
         }
       } else {
@@ -290,13 +290,13 @@ async function handlePdfLoad(file, successMsg, isViewMode = false) {
       }
     } catch (error) {
       console.error("Error loading PDF:", error);
-      statusMsg.textContent = "❌ Error loading PDF: " + error.message;
+      statusMsg.textContent = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='width: 1em; height: 1em; vertical-align: middle;'><circle cx='12' cy='12' r='10'></circle><path d='m15 9-6 6'></path><path d='m9 9 6 6'></path></svg> Error loading PDF: " + error.message;
       statusMsg.style.color = "#dc3545";
       viewer.innerHTML = "";
     }
   };
   reader.onerror = () => {
-    statusMsg.textContent = "❌ Error reading file";
+    statusMsg.textContent = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='width: 1em; height: 1em; vertical-align: middle;'><circle cx='12' cy='12' r='10'></circle><path d='m15 9-6 6'></path><path d='m9 9 6 6'></path></svg> Error reading file";
     statusMsg.style.color = "#dc3545";
     viewer.innerHTML = "";
   };
@@ -365,7 +365,7 @@ function saveTextMessage() {
   if (text && currentTextContext) {
     const { pageNum, x, y, wrap } = currentTextContext;
     addMarker(pageNum, x, y, "text", text, wrap, true);
-    statusMsg.textContent = "✅ Text marker added!";
+    statusMsg.textContent = "Text marker added!";
     statusMsg.style.color = "#28a745";
     closeTextModal();
   }
@@ -428,7 +428,7 @@ document
           if (currentAudioContext) {
             const { pageNum, x, y, wrap } = currentAudioContext;
             addMarker(pageNum, x, y, "audio", bytes, wrap, true);
-            statusMsg.textContent = "✅ Compressed audio added!";
+            statusMsg.textContent = "Compressed audio added!";
             statusMsg.style.color = "#28a745";
           }
 
@@ -456,7 +456,7 @@ document
         }, 1000);
       } catch (error) {
         console.error("Audio recording failed:", error);
-        statusMsg.textContent = "❌ Microphone access denied";
+        statusMsg.textContent = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='width: 1em; height: 1em; vertical-align: middle;'><circle cx='12' cy='12' r='10'></circle><path d='m15 9-6 6'></path><path d='m9 9 6 6'></path></svg> Microphone access denied";
         statusMsg.style.color = "#dc3545";
         document.getElementById("audioModal").classList.remove("active");
       }
@@ -542,7 +542,7 @@ function openPopupMenu(e, wrap, pageNum) {
       if (ev.target.files[0]) {
         const bytes = new Uint8Array(await ev.target.files[0].arrayBuffer());
         addMarker(pageNum, x, y, "image", bytes, wrap, true);
-        statusMsg.textContent = "✅ Image marker added!";
+        statusMsg.textContent = "Image marker added!";
         statusMsg.style.color = "#28a745";
       }
     };
@@ -626,7 +626,7 @@ function addMarker(pageNum, x, y, type, content, wrap, isNew) {
         x = finalX;
         y = finalY;
 
-        statusMsg.textContent = "📍 Marker dropped and fixed.";
+        statusMsg.textContent = "Marker dropped and fixed.";
         statusMsg.style.color = "#28a745";
       }
 
@@ -740,7 +740,27 @@ function revealMarker(m, wrap) {
       <div class="note-popup-content" style="width:${savedSize.width}px; height:${savedSize.height}px; overflow: hidden; resize: both; cursor: nwse-resize;">
         <img src="${url}" style="width: 100%; height: 100%; object-fit: contain; pointer-events: none;">
       </div>
+      <div style="padding: 10px; border-top: 1px solid var(--border-color);">
+        <button id="sendImageToChatbotBtn" style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green)); border: none; color: white; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          Ask Chatbot
+        </button>
+      </div>
     `;
+
+    // Add event listener for the send to chatbot button
+    setTimeout(() => {
+      const sendImageToChatbotBtn = display.querySelector('#sendImageToChatbotBtn');
+      if (sendImageToChatbotBtn) {
+        sendImageToChatbotBtn.onclick = (e) => {
+          e.stopPropagation();
+          sendImageToChatbot(blob, url);
+          display.remove(); // Close the popup after sending
+        };
+      }
+    }, 0);
   } else if (type === "audio") {
     const blob = new Blob([content], { type: "audio/webm" });
     const url = URL.createObjectURL(blob);
@@ -758,8 +778,28 @@ function revealMarker(m, wrap) {
       </div>
       <div class="note-popup-content" style="padding: 15px;">
         <audio src="${url}" controls style="width:250px; height:40px;"></audio>
+        <div style="margin-top: 10px; display: flex; gap: 8px;">
+          <button id="sendToChatbotBtn" style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green)); border: none; color: white; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            Send to Chatbot
+          </button>
+        </div>
       </div>
     `;
+
+    // Add event listener for the send to chatbot button
+    setTimeout(() => {
+      const sendToChatbotBtn = display.querySelector('#sendToChatbotBtn');
+      if (sendToChatbotBtn) {
+        sendToChatbotBtn.onclick = (e) => {
+          e.stopPropagation();
+          sendAudioToChatbot(blob, url);
+          display.remove(); // Close the popup after sending
+        };
+      }
+    }, 0);
   }
 
   // 2. CREATE AND ATTACH YOUR ORIGINAL UNIFIED CLOSE BUTTON
@@ -802,7 +842,7 @@ function closePopup() {
 function startSnippingMode(pageNum, wrap) {
   isSnippingMode = true;
   statusMsg.textContent =
-    "✂️ Snipping mode active. Click and drag to select text.";
+    "Snipping mode active. Click and drag to select text.";
   statusMsg.style.color = "#17a2b8";
 
   const canvas = wrap.querySelector("canvas");
@@ -866,7 +906,7 @@ function startSnippingMode(pageNum, wrap) {
       // Add snipped text to chatbot context and show tagged message
       if (window.chatbotInstance) {
         window.chatbotInstance.addSnippedText(selectedText);
-        statusMsg.textContent = "✅ Text snipped and added to chatbot context!";
+        statusMsg.textContent = "Text snipped and added to chatbot context!";
         statusMsg.style.color = "#28a745";
 
         // Show chatbot if hidden
@@ -884,7 +924,7 @@ function startSnippingMode(pageNum, wrap) {
         statusMsg.style.color = "#ffc107";
       }
     } else {
-      statusMsg.textContent = "⚠️ No text found in selected area.";
+      statusMsg.textContent = "No text found in selected area.";
       statusMsg.style.color = "#dc3545";
     }
 
@@ -935,7 +975,7 @@ async function extractTextFromArea(pageNum, minX, minY, maxX, maxY) {
 /**************** SAVE (METADATA + COMPRESSION) *********************/
 saveBtn.onclick = async () => {
   if (!pdfBase64) {
-    statusMsg.textContent = "❌ Please load a PDF first!";
+    statusMsg.textContent = "Please load a PDF first!";
     statusMsg.style.color = "#dc3545";
     return;
   }
@@ -982,7 +1022,7 @@ saveBtn.onclick = async () => {
     }
 
     if (metadataEntries.length === 0) {
-      statusMsg.textContent = "⚠️ No markers to save!";
+      statusMsg.textContent = "No markers to save!";
       statusMsg.style.color = "#dc3545";
       return;
     }
@@ -1007,11 +1047,11 @@ saveBtn.onclick = async () => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    statusMsg.textContent = `✅ PDF saved successfully!`;
+    statusMsg.textContent = `PDF saved successfully!`;
     statusMsg.style.color = "#28a745";
   } catch (err) {
     console.error("Save failed:", err);
-    statusMsg.textContent = "❌ Save failed. Image might be too large.";
+    statusMsg.textContent = "Save failed. Image might be too large.";
     statusMsg.style.color = "#dc3545";
   }
 };
@@ -1172,7 +1212,7 @@ async function restoreMarkers() {
     console.log(`Restored ${restoredCount} markers`);
 
     if (restoredCount > 0) {
-      statusMsg.textContent = `✅ Found ${restoredCount} hidden items! Click red dots to view.`;
+      statusMsg.textContent = `Found ${restoredCount} hidden items! Click red dots to view.`;
       statusMsg.style.color = "#28a745";
 
       if (!document.querySelector("#pulse-animation")) {
@@ -1197,13 +1237,13 @@ async function restoreMarkers() {
 
       return true;
     } else {
-      statusMsg.textContent = "⚠️ No hidden data could be restored.";
+      statusMsg.textContent = "No hidden data could be restored.";
       statusMsg.style.color = "#dc3545";
       return false;
     }
   } catch (e) {
     console.error("Restore failed:", e);
-    statusMsg.textContent = "❌ Error restoring data";
+    statusMsg.textContent = "Error restoring data";
     statusMsg.style.color = "#dc3545";
     return false;
   }
@@ -1258,6 +1298,50 @@ window.addEventListener("DOMContentLoaded", () => {
     }, 1200);
   }, 300);
 });
+
+// Function to send audio from markers to chatbot
+function sendAudioToChatbot(blob, url) {
+  if (window.chatbotInstance) {
+    // Show chatbot if hidden
+    const chatbotContainer = document.getElementById("chatbot-container");
+    const mainContent = document.querySelector(".main-content");
+    if (chatbotContainer && chatbotContainer.classList.contains("hidden")) {
+      chatbotContainer.classList.remove("hidden");
+      mainContent.classList.add("chatbot-visible");
+    }
+
+    // Add the voice message to chatbot
+    window.chatbotInstance.addVoiceMessage(url, blob);
+
+    statusMsg.textContent = "Audio sent to chatbot!";
+    statusMsg.style.color = "#28a745";
+  } else {
+    statusMsg.textContent = "Chatbot not available";
+    statusMsg.style.color = "#dc3545";
+  }
+}
+
+// Function to send image from markers to chatbot
+function sendImageToChatbot(blob, url) {
+  if (window.chatbotInstance) {
+    // Show chatbot if hidden
+    const chatbotContainer = document.getElementById("chatbot-container");
+    const mainContent = document.querySelector(".main-content");
+    if (chatbotContainer && chatbotContainer.classList.contains("hidden")) {
+      chatbotContainer.classList.remove("hidden");
+      mainContent.classList.add("chatbot-visible");
+    }
+
+    // Add the image message to chatbot
+    window.chatbotInstance.addImageMessage(url, blob);
+
+    statusMsg.textContent = "Image sent to chatbot!";
+    statusMsg.style.color = "#28a745";
+  } else {
+    statusMsg.textContent = "Chatbot not available";
+    statusMsg.style.color = "#dc3545";
+  }
+}
 
 // Optional: Add a "Scanning" effect when a PDF is first rendered
 function triggerScanEffect() {

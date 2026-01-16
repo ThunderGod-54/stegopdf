@@ -386,6 +386,38 @@
             color: var(--text-primary);
         }
 
+        .chat-message.voice .message-bubble {
+            border: 1px solid var(--border-color);
+            border-bottom-left-radius: 4px;
+        }
+
+        .light-theme .chat-message.voice .message-bubble {
+            background: rgba(255, 255, 255, 0.9);
+            color: var(--text-primary);
+        }
+
+        .dark-theme .chat-message.voice .message-bubble {
+            background: rgba(0, 0, 0, 0.4);
+            color: var(--text-primary);
+        }
+
+        .chat-message.image .message-bubble {
+            border: 1px solid var(--border-color);
+            border-bottom-left-radius: 4px;
+        }
+
+        .light-theme .chat-message.image .message-bubble {
+            background: rgba(255, 255, 255, 0.9);
+            color: var(--text-primary);
+        }
+
+        .dark-theme .chat-message.image .message-bubble {
+            background: rgba(0, 0, 0, 0.4);
+            color: var(--text-primary);
+        }
+
+
+
         /* Typing Indicator */
         .typing-indicator {
             display: flex;
@@ -1250,6 +1282,58 @@
 
 
 
+
+
+        /* Voice Loading Animation */
+        .voice-loading {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--accent-cyan);
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .voice-loading-dots {
+            display: flex;
+            gap: 4px;
+        }
+
+        .voice-loading-dots span {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent-cyan);
+            animation: voiceLoadingDot 1.4s infinite ease-in-out;
+        }
+
+        .voice-loading-dots span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .voice-loading-dots span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes voiceLoadingDot {
+
+            0%,
+            80%,
+            100% {
+                transform: scale(0);
+                opacity: 0.5;
+            }
+
+            40% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .voice-loading-text {
+            color: var(--text-secondary);
+        }
+
         /* Mobile Responsiveness */
         @media (max-width: 768px) {
             .content-wrapper {
@@ -1384,7 +1468,8 @@
     <!-- Content Layer -->
     <div class="content-wrapper">
         <div class="header-container">
-            <h2>🔐 Stego PDF Editor</h2>
+            <h2><img src="assets/upscalemedia-transformed-fotor-20260115235456.png" alt="Lock Icon"
+                    style="width: 1.5em; height: 1.5em; vertical-align: top;"> Stego PDF Editor</h2>
             <p>Upload a PDF, click anywhere to hide <b>Text, High-Res Images, or Audio</b>.</p>
             <div class="toolbar">
                 <input type="file" id="pdfUpload" accept="application/pdf" style="display:none">
@@ -1436,8 +1521,34 @@
                 <div class="chat-input-area">
                     <input type="file" id="fileUpload" accept=".pdf,image/*" style="display: none;">
                     <button id="addFileButton"
-                        style="background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan)); border: none; color: white; padding: 8px 12px; border-radius: 20px; cursor: pointer; margin-right: 8px;">📎
+                        style="background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan)); border: none; color: white; padding: 8px 12px; border-radius: 20px; cursor: pointer; margin-right: 8px;"><svg
+                            width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path
+                                d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48">
+                            </path>
+                        </svg>
                         Add File</button>
+                    <button id="voiceButton"
+                        style="background: linear-gradient(135deg, var(--accent-orange), var(--accent-cyan)); border: none; color: white; padding: 8px 12px; border-radius: 20px; cursor: pointer; margin-right: 8px; display: flex; align-items: center; gap: 6px;"
+                        title="Voice Message">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                            <line x1="12" y1="19" x2="12" y2="23"></line>
+                            <line x1="8" y1="23" x2="16" y2="23"></line>
+                        </svg>
+                        Voice
+                    </button>
+                    <div id="voiceLoading" class="voice-loading" style="display: none; margin-right: 8px;">
+                        <div class="voice-loading-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                        <span class="voice-loading-text">Listening...</span>
+                    </div>
                     <input type="text" id="chatInput" placeholder="Type your message...">
                     <button id="sendButton">Send</button>
                 </div>
@@ -1506,6 +1617,36 @@
             </div>
         </div>
     </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal-content">
+            <div class="modal-header" style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 6h18"></path>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                </svg>
+                <span>Delete Marker</span>
+            </div>
+            <p style="text-align: center; color: var(--text-secondary); margin: 20px 0;">Are you sure you want to delete
+                this marker? This action cannot be undone.</p>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+                <button class="modal-btn modal-btn-primary" onclick="confirmDelete()"
+                    style="background: linear-gradient(135deg, #dc3545, #c82333);">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h18"></path>
+                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                    </svg>
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -1519,6 +1660,9 @@
             container.classList.toggle('hidden');
             mainContent.classList.toggle('chatbot-visible');
         }
+
+
     </script>
 </body>
+
 </html>
