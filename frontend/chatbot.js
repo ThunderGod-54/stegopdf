@@ -23,15 +23,13 @@ class Chatbot {
         // Add clear chat button
         this.clearChatButton = document.createElement('button');
         this.clearChatButton.textContent = 'Clear Chat';
-        this.clearChatButton.style.background = 'none';
-        this.clearChatButton.style.border = '1px solid black';
-        this.clearChatButton.style.color = 'inherit';
         this.clearChatButton.style.cursor = 'pointer';
         this.clearChatButton.style.fontSize = '0.8em';
-        this.clearChatButton.style.padding = '4px 8px';
-        this.clearChatButton.style.borderRadius = '4px';
+        this.clearChatButton.style.padding = '6px 12px';
+        this.clearChatButton.style.borderRadius = '6px';
         this.clearChatButton.style.marginLeft = 'auto';
         this.clearChatButton.style.marginRight = '10px';
+        this.clearChatButton.style.transition = 'all 0.3s ease';
         this.clearChatButton.addEventListener('click', () => this.clearChat());
         // Position at the top of the chatbot, in the header
         const headerDiv = document.querySelector('#chatbot-container > div:first-child');
@@ -486,11 +484,13 @@ class Chatbot {
         if (this.clearChatButton) {
             const body = document.body;
             if (body.classList.contains('dark-theme')) {
-                this.clearChatButton.style.border = '1px solid white';
-                this.clearChatButton.style.color = 'white';
+                this.clearChatButton.style.background = 'var(--bg-secondary)';
+                this.clearChatButton.style.border = '1px solid var(--border-color)';
+                this.clearChatButton.style.color = 'var(--text-primary)';
             } else {
-                this.clearChatButton.style.border = '1px solid black';
-                this.clearChatButton.style.color = 'black';
+                this.clearChatButton.style.background = 'var(--bg-secondary)';
+                this.clearChatButton.style.border = '1px solid var(--border-color)';
+                this.clearChatButton.style.color = 'var(--text-primary)';
             }
         }
     }
