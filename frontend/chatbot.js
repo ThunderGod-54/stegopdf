@@ -294,12 +294,14 @@ class Chatbot {
         this.showTypingIndicator();
 
         try {
+            const apiKey = document.getElementById('geminiApiKey').value.trim();
             const res = await fetch('http://localhost:3000/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message,
-                    context: this.context
+                    context: this.context,
+                    apiKey: apiKey || null // Send null if no API key provided
                 })
             });
 
