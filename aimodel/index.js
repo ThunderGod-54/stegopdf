@@ -10,10 +10,10 @@ app.use(helmet({
     contentSecurityPolicy: false, // Allows the inline success message to render properly
 }));
 app.use(express.json({ limit: '10mb' }));
-
 // 2. Production & Development CORS Policy
 const allowedOrigins = [
-    'https://stegopdf2026.web.app',          // Production Firebase
+    'https://stegopdf.com',                  // Your NEW Production Domain
+    'https://stegopdf2026.web.app',          // Old Production Firebase
     'https://stegopdf2026.firebaseapp.com',  // Firebase Alternate
     'http://localhost:3000',                 // Local Backend Port
     'http://localhost:5173',                 // Local Vite Development
@@ -45,7 +45,7 @@ app.get("/", (req, res) => {
                 <p style="color: #666; font-size: 1.1rem; line-height: 1.6;">The StegoPDF Backend is live, secure, and optimized for Binary Intelligence.</p>
                 <div style="width: 60px; height: 4px; background: linear-gradient(90deg, #0099ff, #00ffcc); margin: 25px auto; border-radius: 2px;"></div>
                 <p style="font-weight: 500; color: #333;">Visit the official website to use the app:</p>
-                <a href="https://stegopdf2026.web.app" 
+                <a href="https://stegopdf.com" 
                    style="display: inline-block; margin-top: 20px; padding: 14px 32px; background: #000; color: white; text-decoration: none; border-radius: 12px; font-weight: 600; transition: transform 0.2s;">
                    Visit StegoPDF Official
                 </a>
