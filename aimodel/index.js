@@ -59,7 +59,7 @@ function getRotatedApiKey() {
 }
 
 // Fallback wrapper for 429 errors
-async function callGeminiWithFallback(primaryKey, contents, modelName = "gemini-2.5-flash") {
+async function callGeminiWithFallback(primaryKey, contents, modelName = "gemini-2.5-flash", isUserKey = false) {
     const genAI = new GoogleGenerativeAI(primaryKey);
     const model = genAI.getGenerativeModel({ model: modelName });
 
@@ -68,15 +68,15 @@ async function callGeminiWithFallback(primaryKey, contents, modelName = "gemini-
         return await result.response.text();
     } catch (err) {
         console.error(`❌ Key ${primaryKey.slice(0, 10)}... failed (status: ${err.status}):`, err.message);
-        if (err.status === 429 && apiKeys.length > 1) {
+        if (!isUserKey && err.status === 429 && apiKeys.length > 1) {
             console.log("🔄 Retrying with least-used key due to 429...");
             const fallbackKey = getLeastUsedKey();
             if (fallbackKey && fallbackKey !== primaryKey) {
                 requestCounts[fallbackKey] = (requestCounts[fallbackKey] || 0) + 1;
-                return await callGeminiWithFallback(fallbackKey, contents, modelName);
+                return await callGeminiWithFallback(fallbackKey, contents, modelName, false);
             }
         }
-        throw err; // Re-throw non-429 or no fallback
+        throw err; // Re-throw non-429, no fallback, or if it was a user key
     }
 }
 
@@ -240,20 +240,29 @@ app.get("/auth/check-email/:email", (req, res) => {
 
 app.post("/chat", async (req, res) => {
     try {
-        const { message, context } = req.body;
+        const { message, context, apiKey } = req.body;
 
         if (!message) {
             return res.status(400).json({ reply: "Empty message" });
         }
 
-        if (apiKeys.length === 0) {
-            return res.status(500).json({ reply: "Server not configured with GEMINI_API_KEYS. Check .env" });
-        }
+        let primaryKey;
+        let isUserKey = false;
 
-        // Get least-used key for equal distribution
-        const primaryKey = getLeastUsedKey();
-        if (primaryKey) {
-            requestCounts[primaryKey] = (requestCounts[primaryKey] || 0) + 1;
+        if (typeof apiKey === 'string' && apiKey.trim() !== '') {
+            primaryKey = apiKey.trim();
+            isUserKey = true;
+            console.log("🟢 User Option Selected: [Custom Gemini API Key]");
+        } else {
+            console.log("🟡 User Option Selected: [StegoBackend Default AI Model]");
+            if (apiKeys.length === 0) {
+                return res.status(500).json({ reply: "Server not configured with GEMINI_API_KEYS. Check .env" });
+            }
+            // Get least-used key for equal distribution
+            primaryKey = getLeastUsedKey();
+            if (primaryKey) {
+                requestCounts[primaryKey] = (requestCounts[primaryKey] || 0) + 1;
+            }
         }
 
         // Build multimodal contents (unchanged)
@@ -285,12 +294,8 @@ app.post("/chat", async (req, res) => {
                 }
             }
         }
-
-        // Add user message
         contents.push({ text: `User: ${message}` });
-
-        // Call Gemini with fallback
-        const reply = await callGeminiWithFallback(primaryKey, contents);
+        const reply = await callGeminiWithFallback(primaryKey, contents, "gemini-2.5-flash", isUserKey);
 
         res.json({ reply });
     } catch (err) {
@@ -306,8 +311,6 @@ app.post("/chat", async (req, res) => {
         });
     }
 });
-
-// Stats endpoint for monitoring balance
 app.get("/stats", (req, res) => {
     const totalRequests = Object.values(requestCounts).reduce((sum, count) => sum + count, 0);
     const balanced = Math.max(...Object.values(requestCounts)) - Math.min(...Object.values(requestCounts || { 0: 0 })) <= 1;
@@ -316,19 +319,17 @@ app.get("/stats", (req, res) => {
         requestCounts,
         totalRequests,
         balanced,
-        message: balanced ? "Perfectly balanced" : "⚠️ Rebalancing recommended"
+        message: balanced ? "✅ Perfectly balanced" : "⚠️ Rebalancing recommended"
     });
 });
 
 // Daily counter reset (prevent long-term drift)
 setInterval(() => {
-    console.log("Daily reset: Cleared request counters");
+    console.log("📊 Daily reset: Cleared request counters");
     apiKeys.forEach(key => {
         requestCounts[key] = 0;
     });
-}, 24 * 60 * 60 * 1000); // 24 hours
-
-// 3. ROOT ROUTE: Success Message
+}, 24 * 60 * 60 * 1000); 
 app.get("/", (req, res) => {
     res.send(`
         <div style="font-family: 'Inter', sans-serif; text-align: center; padding: 60px 20px; background: #f9fafb; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center;">
@@ -348,7 +349,11 @@ app.get("/", (req, res) => {
     `);
 });
 app.listen(PORT, () => {
-    console.log(`✅ Server running → http://localhost:${PORT}`);
-    console.log(`📈 Stats: http://localhost:${PORT}/stats`);
-    console.log(`🔑 Keys loaded: ${apiKeys.length}`);
+    console.log(`\n======================================================`);
+    console.log(`✅ SUCCESS: AI Model Backend & UI Route Initialized!`);
+    console.log(`  ======================================================`);
+    console.log(`||🚀 Server running   → http://localhost:${PORT}     ||`);
+    console.log(`||📈 Live Stats       → http://localhost:${PORT}/stats ||`);
+    console.log(`||🔑 API Keys loaded  : ${apiKeys.length}              ||`);
+    console.log(`======================================================`);
 });
